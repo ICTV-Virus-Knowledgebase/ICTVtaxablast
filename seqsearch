@@ -795,7 +795,7 @@ if __name__ == "__main__" :
    settings = Settings(
       blastdb = args.blastdb,
       db = args.db,
-      decode_filenames = True if args.decode.trim().lower() == "true" else False,
+      decode_filenames = True if args.decode.strip().lower() == "true" else False,
       html = args.html,
       indir = args.indir,
       json_filename = args.json,
