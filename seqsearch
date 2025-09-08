@@ -4,6 +4,7 @@
 #
 
 import argparse
+import base64
 from dataclasses import asdict, dataclass
 import re
 import pandas as pd
@@ -81,30 +82,69 @@ class SearchResults():
 class Settings():
    blastdb: str
    db: str
+   decode_filenames: bool
    html: str
    indir: str
    json_filename: str
    outdir: str
    verbose: bool
 
-# FASTA files with more than 1 sequence are split into multiple FASTA files with one sequence each.
+
+# A FASTA file containing a single sequence.
 class SequenceFile():
 
-   # The name of the file that contains a sequence from the uploaded FASTA input file. For uploaded  
-   # input files with a single sequence, the input filename is used for both names.
-   filename: str
+   # The input file's extension (suffix).
+   extension: str 
 
-   # The filename of the uploaded FASTA input file.
-   input_filename: str
+   # The input file's base name (stem).
+   input_basename: str
 
-   # The length of the FASTA sequence in the file "fasta".
+   # Was this file split from the input file?
+   is_split: bool
+
+   # A readable version of the input file's base name. This will be the same as the input base name if
+   # settings.decode_filenames is False. Otherwise, this will be the decoded basename of the input file.
+   readable_basename: str
+
+   # The length of the file's FASTA sequence.
    sequence_length: int
 
+   # For split files, the text added to the base filename.
+   split_identifier: str|None
+
+   
+
    # C-tor
-   def __init__(self, fasta_: str, input_: str, sequence_length_: int):
-      self.filename = fasta_
-      self.input_filename = input_
-      self.sequence_length = sequence_length_
+   def __init__(self, input_filename: str, is_split: bool, sequence_length: int, split_identifier: str = ""):
+
+      self.is_split = is_split
+      self.sequence_length = sequence_length
+      self.split_identifier = split_identifier
+
+      input_path = Path(input_filename)
+
+      # Get the input file's basename and extension.
+      self.input_basename = input_path.stem
+      self.extension = input_path.suffix
+
+      # Determine the "readable" version of the input file's base name.
+      self.readable_basename = self.input_basename if not settings.decode_filenames else str(base64.urlsafe_b64decode(self.input_basename))
+      
+   # Get the sequence filename
+   def get_filename(self) -> str:
+      return f"{self.input_basename}{self.split_identifier}{self.extension}"
+   
+   # Get the input filename
+   def get_input_filename(self) -> str:
+      return f"{self.input_basename}{self.extension}"
+   
+   # Get a readable version of the sequence filename.
+   def get_readable_filename(self) -> str:
+      return f"{self.readable_basename}{self.split_identifier}{self.extension}"
+   
+   # Get a readable version of the input filename.
+   def get_readable_input_filename(self) -> str:
+      return f"{self.readable_basename}{self.extension}"
    
 
 #---------------------------------------------------------------------------------------------------
@@ -117,10 +157,20 @@ CSV_COLUMNS = ["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "q
 # Valid extensions for input FASTA files.
 FASTA_FILE_EXTENSIONS = [".fa", ".fas", ".fasta", ".ffn", ".fna", ".frn", ".fsa", ".seq", ".txt"]
 
+# The maximum number of sequences that can be processed.
+MAX_SEQUENCES = 100
+
 PROCESSED_ACCESSIONS_FILENAME = "processed_accessions_b.fa_names.tsv"
 
 # A subdirectory of the input directory for FASTA files containing a single sequence.
 SEQUENCE_FILES_DIR = "sequence_files"
+
+# Valid amino acids (proteins) in a FASTA file.
+VALID_AA = set("ACDEFGHIKLMNPQRSTVWY")
+
+# Valid nucleotides in a FASTA file.
+VALID_NT = set("ACGTURYSWKMBDHVN.-")
+
 
 rankmap = {
    "Realm": "realm",
@@ -162,7 +212,7 @@ search_results: SearchResults
 #---------------------------------------------------------------------------------------------------
 # Create a BLAST hit object using a data row.
 #---------------------------------------------------------------------------------------------------
-def create_blast_hit(fasta_basename: str, row: pd.Series, row_index: int) -> BlastHit:
+def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> BlastHit:
 
    bitscore = row["bitscore"]
    if isinstance(bitscore, float) and np.isnan(bitscore):
@@ -196,13 +246,11 @@ def create_blast_hit(fasta_basename: str, row: pd.Series, row_index: int) -> Bla
 
    length = row["length"]
 
-   input_seq = fasta_basename
-
    pident = row["pident"]
 
    qseqid = row["qseqid"]
    if isinstance(qseqid, float) and np.isnan(qseqid):
-      error_message = f"Error: Invalid qseqid is NaN in row {row_index} of {fasta_basename}"
+      error_message = f"Error: Invalid qseqid is NaN in row {row_index} of {readable_filename}"
       raise ValueError(error_message)
    else:
       qseqid = str(qseqid)
@@ -256,7 +304,7 @@ def create_blast_hit(fasta_basename: str, row: pd.Series, row_index: int) -> Bla
       evalue = evalue,
       exemplar_additional = exemplar_additional,
       ictv_id = ictv_id,
-      input_seq = input_seq,
+      input_seq = readable_filename,
       isolate_id = isolate_id,
       length = length,
       pident = pident,
@@ -335,6 +383,13 @@ def get_git_version() -> str:
    return git_version
 
 
+# Is this a valid nucleotide or amino acid sequence?
+def is_valid_sequence(sequence: str) -> bool:
+
+   # For now, validate as either nucleotide or amino acid.
+   return set(sequence.upper()) <= VALID_NT or set(sequence.upper()) <= VALID_AA
+
+
 #---------------------------------------------------------------------------------------------------
 # The main / entry point function.
 #---------------------------------------------------------------------------------------------------
@@ -343,76 +398,94 @@ def main() -> None:
    global parsed_data_df
    global search_results
 
-   # Get the BLAST database title and git version.
-   db_title = get_database_title()
-   version = get_git_version()
+   try:
+      # Get the BLAST database title and git version.
+      db_title = get_database_title()
+      version = get_git_version()
 
-   # Initialize the search results that will be converted to a JSON output file.
-   search_results = SearchResults(
-      database_name = str(settings.blastdb),
-      database_title = db_title,
-      errors = "",
-      files = [],
-      input_dir = settings.indir,
-      program_name = os.path.basename(sys.argv[0]),
-      version = version
-   )
-   
-   # parsed_data_df is df for the processed_accessions_b.tsv file
-   parsed_data_df = pd.read_csv(PROCESSED_ACCESSIONS_FILENAME, sep="\t", header=0)
-   if (parsed_data_df.empty):
-      print(f"Error: {PROCESSED_ACCESSIONS_FILENAME} is empty or not found.")
-      sys.exit(1)
+      # Initialize the search results that will be serialized as a JSON output file.
+      search_results = SearchResults(
+         database_name = str(settings.blastdb),
+         database_title = db_title,
+         errors = "",
+         files = [],
+         input_dir = settings.indir,
+         program_name = os.path.basename(sys.argv[0]),
+         version = version
+      )
+      
+      # parsed_data_df is df for the processed_accessions_b.tsv file
+      parsed_data_df = pd.read_csv(PROCESSED_ACCESSIONS_FILENAME, sep="\t", header=0)
+      if (parsed_data_df.empty):
+         raise Exception(f"File {PROCESSED_ACCESSIONS_FILENAME} is empty or not found.")
 
-   # Iterate over FASTA input files and split files with multiple sequences.
-   split_filenames = split_input_files()
-   if not split_filenames or len(split_filenames) < 1:
-      print("Error: No FASTA files were found for processing\n")
-      sys.exit(1)
+      # Iterate over FASTA input files and split files with multiple sequences.
+      split_files = split_input_files()
+      if not split_files or len(split_files) < 1:
+         raise Exception("No FASTA files were found for processing\n")
 
-   # Process all FASTA files
-   for split_filename in split_filenames:
-      process_fasta_file(split_filename.filename, split_filename.input_filename, split_filename.sequence_length)
+      # Process all FASTA files
+      for split_file in split_files:
+         process_fasta_file(split_file)
 
-   # Add the file data lookup to the search results as a list.
-   for filename in file_data_lookup:
+      # Add the file data lookup to the search results as a list.
+      for filename in file_data_lookup:
 
-      # Get the associated file data.
-      file_data = file_data_lookup[filename]
+         # Get the associated file data.
+         file_data = file_data_lookup[filename]
 
-      # Add it to the search results.
-      search_results.files.append(file_data)
+         # Add it to the search results.
+         search_results.files.append(file_data)
 
-   # Create the JSON output file using search_results.
-   create_json_file()
+      # Create the JSON output file using search_results.
+      create_json_file()
+
+   except Exception as e:
+      sys.stderr.write(f"\nThe following error occurred: {str(e)}")
+      exit(1)
 
 
 #---------------------------------------------------------------------------------------------------
 # Process a single FASTA file and update the search results.
 #---------------------------------------------------------------------------------------------------
-def process_fasta_file(fasta_filename: str, input_filename: str, sequence_length: int) -> None:
+def process_fasta_file(sequence_file: SequenceFile):
 
    global parsed_data_df
    
-   print(f"\nProcessing FASTA file {fasta_filename} (input file: {input_filename})")
-   
-   # Get the file's basename without extension and the Path as a string.
-   fasta_basename = fasta_filename.rsplit('.', 1)[0]
+   filename = sequence_file.get_filename()
+   input_filename = sequence_file.get_input_filename()
+   readable_filename = sequence_file.get_readable_filename()
+   readable_input_filename = sequence_file.get_readable_input_filename()
 
-   # Try to get the input file's data in json_results. If it hasn't been added yet,
+   # Create a message specific to whether this is a split file and whether it's decoded.
+   message = "\nProcessing FASTA file "
+   if not sequence_file.is_split:
+      message += f"{input_filename}"
+      if settings.decode_filenames:
+         message += f" ({readable_input_filename})"
+   else:
+      message += f"{filename}"
+      if settings.decode_filenames:
+         message += f" ({readable_filename}) from input file {input_filename} ({readable_input_filename})"
+      else:
+         message += f" from input file {input_filename}"
+   
+   print(message)
+
+   # Look for the input file's data in json_results. If it hasn't been added yet,
    # create a new input file data object.
    if input_filename in file_data_lookup:
       input_file_data = file_data_lookup[input_filename]
    else:
       input_file_data = FileData(
          errors = [],
-         name = input_filename,
+         name = readable_input_filename,
          sequences = []
       )
       
    try:
       # Run blastn on the FASTA file and generate ASN, CSV, and HTML output files.
-      run_blast(fasta_filename)
+      run_blast(filename)
 
    except RuntimeError as e:
       print(str(e))
@@ -423,8 +496,8 @@ def process_fasta_file(fasta_filename: str, input_filename: str, sequence_length
       return
 
    # The output file paths for the blast results.
-   blastcsv_output_filepath = f"{settings.outdir}/{fasta_filename}.csv"
-   blasthtml_output_filepath = f"{settings.outdir}/{fasta_filename}.html"
+   blastcsv_output_filepath = f"{settings.outdir}/{filename}.csv"
+   blasthtml_output_filepath = f"{settings.outdir}/{filename}.html"
 
    # Create a sequence data object.
    sequence_data = SequenceData(
@@ -432,9 +505,9 @@ def process_fasta_file(fasta_filename: str, input_filename: str, sequence_length
       blast_html = blasthtml_output_filepath,
       errors = [],
       hits = [],
-      input_file = input_filename,
+      input_file = readable_filename,
       qseqid = "",
-      sequence_length = sequence_length,
+      sequence_length = sequence_file.sequence_length,
       status = ""
    )
 
@@ -469,7 +542,7 @@ def process_fasta_file(fasta_filename: str, input_filename: str, sequence_length
 
          # Generate an error message and print it.
          error_message = f"INTERNAL ERROR: {merge_missing} out of {len(df)} sseqid.base_accession's didn't match to processed_accessions table. Check if your blastdb and processed_accesions table are out of sync.\n"
-         print(error_message)
+         sys.stderr.write(error_message)
 
          # Update the input file's errors.
          input_file_data.errors.append(error_message)
@@ -478,7 +551,7 @@ def process_fasta_file(fasta_filename: str, input_filename: str, sequence_length
 
          # Generate an error message and print it.
          error_message = "INTERNAL ERROR: merging blast results to processed_accessions added extra rows. Check if your blastdb and processed_accesions table are out of sync.\n"
-         print(error_message)
+         sys.stderr.write(error_message)
 
          # Update the input file's errors and add it back to the file data lookup.
          input_file_data.errors.append(error_message)
@@ -488,9 +561,9 @@ def process_fasta_file(fasta_filename: str, input_filename: str, sequence_length
       # TODO: How does status get populated???
 
       # iterate over the merged dataframe to extract the data to hit dict
-      for index, row in merge_dfs.iterrows():
+      for _, row in merge_dfs.iterrows():
          
-         hit = create_blast_hit(fasta_basename, row, hitCount)
+         hit = create_blast_hit(readable_filename, row, hitCount)
 
          # The qseqid is the same for all of these BLAST hits, so use the first one.
          if hitCount == 0:
@@ -509,13 +582,27 @@ def process_fasta_file(fasta_filename: str, input_filename: str, sequence_length
          #print("Wrote tsv file: ", os.path.join(args.outdir, blastcsv_output_filepath + "_hits.tsv"))
 
    except pd.errors.EmptyDataError:
-      print(blastcsv_output_filepath, " is empty and has been skipped. ", "status: NO_HITS")
+      error_message = f"{blastcsv_output_filepath} is empty and has been skipped. status: NO_HITS\n"
+      
+      sys.stderr.write(error_message)
+
+      # Update the input file data and add it to the file data lookup.
+      input_file_data.errors.append(error_message)
+      file_data_lookup[input_filename] = input_file_data
+      return
+   
+   except Exception as e:
+      error_message = f"{str(e)}\n"
+
+      sys.stderr.write(error_message)
+
+      # Update the input file data and add it to the file data lookup.
+      input_file_data.errors.append(error_message)
+      file_data_lookup[input_filename] = input_file_data
+      return
 
    # Determine the sequence data's status.
-   if hitCount > 0:
-      sequence_data.status = "HITS"
-   else:
-      sequence_data.status = "NO_HITS"
+   sequence_data.status = "HITS" if hitCount > 0 else "NO_HITS"
 
    # Add the sequence data to the input file data.
    input_file_data.sequences.append(sequence_data)
@@ -527,20 +614,20 @@ def process_fasta_file(fasta_filename: str, input_filename: str, sequence_length
 #---------------------------------------------------------------------------------------------------
 # Run blastn on a FASTA file and generate ASN, CSV, and HTML output files.
 #---------------------------------------------------------------------------------------------------
-def run_blast(fasta_filename: str):
+def run_blast(filename: str):
 
-   print(f"\nRunning blastn on {fasta_filename}")
+   print(f"\nRunning blastn on {filename}")
    
    # Create file names/paths for the output files.
-   blastasn_output_filepath = f"{settings.outdir}/{fasta_filename}.asn"
-   blastcsv_output_filepath = f"{settings.outdir}/{fasta_filename}.csv"
-   blasthtml_output_filepath = f"{settings.outdir}/{fasta_filename}.html"
+   blastasn_output_filepath = f"{settings.outdir}/{filename}.asn"
+   blastcsv_output_filepath = f"{settings.outdir}/{filename}.csv"
+   blasthtml_output_filepath = f"{settings.outdir}/{filename}.html"
 
    print(f"CSV output path: {blastcsv_output_filepath}")
    print(f"HTML output path: {blasthtml_output_filepath}")
 
    # The FASTA file's full path.
-   fasta_path = f"{settings.indir}/{SEQUENCE_FILES_DIR}/{fasta_filename}"
+   fasta_path = f"{settings.indir}/{SEQUENCE_FILES_DIR}/{filename}"
 
    try:
       blastasn_cmd = ["blastn", "-db", settings.blastdb, "-query", fasta_path, "-out", blastasn_output_filepath, "-outfmt", "11"]
@@ -550,7 +637,9 @@ def run_blast(fasta_filename: str):
       subprocess.run(blastasn_cmd, capture_output=True, text=True, check=True)
 
    except subprocess.CalledProcessError as e:
-      raise RuntimeError(f"Error running blastn command:\n{e.stderr}")
+      raise RuntimeError(f"Runtime error from blastn command:\n{e.stderr}")
+   except Exception as ex:
+      raise RuntimeError(f"Error running blastn command:\n{str(ex)}")
 
    # Generate the CSV output file.
    try:
@@ -565,8 +654,10 @@ def run_blast(fasta_filename: str):
       df.to_csv(blastcsv_output_filepath, index=False)
 
    except subprocess.CalledProcessError as e:
-      raise RuntimeError(f"Error running blast_formatter (CSV) command:\n{e.stderr}")
-
+      raise RuntimeError(f"Runtime error from blast_formatter (CSV) command:\n{e.stderr}")
+   except Exception as ex:
+      raise RuntimeError(f"Error running blast_formatter (CSV) command:\n{str(ex)}")
+   
    # Generate the HTML output file.
    try:
       blasthtml_cmd = ["blast_formatter", "-archive", blastasn_output_filepath, "-out", blasthtml_output_filepath, "-html"]
@@ -575,7 +666,9 @@ def run_blast(fasta_filename: str):
       subprocess.run(blasthtml_cmd, capture_output=True, text=True, check=True)
 
    except subprocess.CalledProcessError as e:
-      raise RuntimeError(f"Error running blast_formatter (HTML) command:\n{e.stderr}\n")
+      raise RuntimeError(f"Runtime error from blast_formatter (HTML) command:\n{e.stderr}\n")
+   except Exception as ex:
+      raise RuntimeError(f"Error running blast_formatter (HTML) command:\n{str(ex)}")
    
 
 #---------------------------------------------------------------------------------------------------
@@ -585,9 +678,13 @@ def split_input_files() -> list[SequenceFile] | None:
    
    print("\nSplitting input file(s)")
 
-   filenames: list[SequenceFile] = []
+   # The collection of sequence file objects that will be returned.
+   sequence_files: list[SequenceFile] = []
 
-   # Create a path object from the input directory path.
+   # Keep track of the total number of sequences we find.
+   sequence_count = 0
+
+   # Create a path object from the input directory.
    input_directory = Path(settings.indir)
    
    # Create the SEQUENCE_FILES_DIR subdirectory.
@@ -606,18 +703,31 @@ def split_input_files() -> list[SequenceFile] | None:
       if sequences is None or len(sequences) < 1:
          continue
 
-      print(f"Found {len(sequences)} sequences in {input_file.name}")
+      print(f"Found {len(sequences)} sequences in {input_file.name}\n")
 
-      # Don't split the file if only has one sequence.
+      # Update the total sequence count.
+      sequence_count += len(sequences)
+
+      if sequence_count > MAX_SEQUENCES:
+         raise Exception(f"You uploaded more than the maximum number of sequences ({MAX_SEQUENCES})")
+      
+      # Don't split the file if it only has one sequence.
       if len(sequences) == 1:
 
-         # Get the length of the single sequence.
+         is_split = False
+
+         # Get the sequence
          sequence = sequences[0]
          if sequence is None or sequence.seq is None:
             continue
 
-         # Add a "split filename" object for the input file.
-         filenames.append(SequenceFile(input_file.name, input_file.name, len(sequence.seq)))
+         # Does the sequence have valid bases?
+         if not is_valid_sequence(str(sequence.seq)):
+            sys.stderr.write(f"Sequence {input_file.name} has invalid bases\n")
+            continue
+
+         # Add a SequenceFile object for the input file.
+         sequence_files.append(SequenceFile(input_file.name, is_split, len(sequence.seq)))
 
          # Copy the file to the sequence_files subdirectory.
          shutil.copy2(input_file, seq_files_path / input_file.name)
@@ -626,20 +736,30 @@ def split_input_files() -> list[SequenceFile] | None:
       # Iterate over all sequences in the FASTA file.
       for s, sequence in enumerate(sequences, start=1):
 
+         is_split = True
+
          if sequence is None or sequence.seq is None:
             continue
 
-         # Create a filename for this sequence's FASTA.
-         new_filename = f"{input_file.stem}_{s}{input_file.suffix}"
-         new_path = seq_files_path / new_filename
+         # Does the sequence have valid bases?
+         if not is_valid_sequence(str(sequence.seq)):
+            sys.stderr.write(f"Sequence {s} in {input_file.name} has invalid bases\n")
+            continue
+
+         # Create a sequence file object for the split file.
+         sequence_file = SequenceFile(input_file.name, is_split, len(sequence.seq), f".{s}")
+
+         # Create a path for the sequence file.
+         sequence_path = seq_files_path / sequence_file.get_filename()
 
          # Create the new FASTA file and populate it with the single sequence.
-         SeqIO.write(sequence, new_path, "fasta")
+         SeqIO.write(sequence, sequence_path, "fasta")
 
-         # Add the filename information to the list of all filenames.
-         filenames.append(SequenceFile(new_filename, input_file.name, len(sequence.seq)))
+         # Add the collection of sequence files.
+         sequence_files.append(sequence_file)
 
-   return filenames
+   return sequence_files
+
 
 
 
@@ -658,6 +778,7 @@ if __name__ == "__main__" :
    parser.add_argument('-html',help="output html base filename",default="tax_results")
    parser.add_argument('-blastdb',help="input blast base filename",default="./blast/ICTV_VMR_b")
    parser.add_argument('-db', help="BLAST database file", default="blast/ICTV_VMR_b")
+   parser.add_argument('-decode', help="Decode the input filenames from base64URL encoding before serializing the search results", default="")
    parser.add_argument('-info', action='store_true', help="Display BLAST database info")
 
    args = parser.parse_args()
@@ -674,6 +795,7 @@ if __name__ == "__main__" :
    settings = Settings(
       blastdb = args.blastdb,
       db = args.db,
+      decode_filenames = True if args.decode.trim().lower() == "true" else False,
       html = args.html,
       indir = args.indir,
       json_filename = args.json,
