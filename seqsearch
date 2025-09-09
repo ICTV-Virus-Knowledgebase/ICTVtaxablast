@@ -530,7 +530,7 @@ def process_fasta_file(sequence_file: SequenceFile):
 
       # initializing the sBaseAccession column in df that is used for joining
       df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\..*$', r'\1',regex=True)
-      print("\n", df["sBaseAccession"])
+      #print("\n", df["sBaseAccession"])
 
       # merging the two dataframes by the sBaseAccession column and the Accession column
       merge_dfs = pd.merge(df, parsed_data_df, left_on="sBaseAccession", right_on= "Accession", how="left")
