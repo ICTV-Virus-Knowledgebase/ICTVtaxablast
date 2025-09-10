@@ -21,6 +21,7 @@ def formatElapsedTime():
     return f"[{hours:02d}h{minutes:02d}m{seconds:02d}s]"
 
 print("# {0} Importing python packages: please wait...".format(formatElapsedTime()))
+# from networkx import is_path
 import pandas as pd
 import subprocess
 from urllib import error
@@ -384,12 +385,20 @@ def fetch_fasta(processed_accession_file_name):
             genus_dir = args.fasta_dir+"/"+str(genus_name)
             if genus_name == "":
                 genus_dir = args.fasta_dir+"/"+"no_genus"
-            accession_raw_file_name = genus_dir+"/"+str(accession_ID)+".raw"
-            accession_fa_file_name = genus_dir+"/"+str(accession_ID)+".fa"
+            accession_nt_raw_file_name = genus_dir+"/"+str(accession_ID)+".nt"+".raw"
+            accession_nt_fa_file_name = genus_dir+"/"+str(accession_ID)+".nt"+".fa"
+            accession_aa_raw_file_name = genus_dir+"/"+str(accession_ID)+".aa"+".raw"
+            accession_aa_fa_file_name = genus_dir+"/"+str(accession_ID)+".aa"+".fa"
+
             
             # Assign the computed values to the new columns
-            Accessions.loc[count, "accession_raw_file_name"] = accession_raw_file_name
-            Accessions.loc[count, "accession_fa_file_name"] = accession_fa_file_name
+            Accessions.loc[count, "accession_nt_raw_file_name"] = accession_nt_raw_file_name
+            Accessions.loc[count, "accession_nt_fa_file_name"] = accession_nt_fa_file_name
+            Accessions.loc[count, "accession_aa_raw_file_aa_name"] = accession_aa_raw_file_name
+            Accessions.loc[count, "accession_aa_fa_file_aa_name"] = accession_aa_fa_file_name
+
+            raw_file_list = [accession_nt_raw_file_name,accession_aa_raw_file_name]
+            fa_file_list = [accession_nt_fa_file_name,accession_aa_fa_file_name]
     
             # make sure dir exists
             if not os.path.exists(genus_dir):
@@ -398,11 +407,12 @@ def fetch_fasta(processed_accession_file_name):
                 if args.verbose: print(f"Directory '{genus_dir}' created successfully.")
     
             # check if the raw file exists
-            if os.path.exists(accession_raw_file_name):
-                if args.verbose: print("[FETCH]  SKIP NCBI fetch for {accession_raw_file_name}".format(**locals()))
+            for files in raw_file_list:
+                if os.path.exists(files):
+                    if args.verbose: print("[FETCH]  SKIP NCBI fetch for {files}".format(**locals()))
             else:
-                raw_file = open(accession_raw_file_name,'w')
-                if args.verbose: print("[FETCH]  EXEC NCBI fetch for {accession_raw_file_name}".format(**locals()))
+                raw_file = open(files,'w')
+                if args.verbose: print("[FETCH]  EXEC NCBI fetch for {files}".format(**locals()))
                 try:
                     # fetch FASTA from NCBI
                     handle = Entrez.efetch(db="nuccore", id=accession_ID, rettype="fasta", retmode="text")
@@ -417,27 +427,28 @@ def fetch_fasta(processed_accession_file_name):
                     raw_fa = handle.read()
                     raw_file.write(raw_fa);
                     raw_file.close()
-                    if args.verbose: print('    wrote: '+accession_raw_file_name)
+                    if args.verbose: print('    wrote: '+files)
 
                 except:
                     print("    [ERR] Accession ID "+"'"+str(accession_ID)+"'"+" Entrez.efetch threw an error",file=sys.stderr)
                     bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
 
             # check if processed fasta is out of date
-            if os.path.getsize(accession_raw_file_name) == 0:
-                if args.verbose: print("[FORMAT] SKIP/ERROR raw files is empty for {accession_fa_file_name}".format(**locals()))
-            elif os.path.exists(accession_fa_file_name) and os.path.getmtime(accession_fa_file_name) > os.path.getmtime(accession_raw_file_name):
-                if args.verbose: print("[FORMAT] SKIP reformat header for {accession_fa_file_name}".format(**locals()))
+            for files in fa_file_list:
+                if os.path.getsize(raw_file) == 0:
+                    if args.verbose: print("[FORMAT] SKIP/ERROR raw files is empty for {files}".format(**locals()))
+                elif os.path.exists(files) and os.path.getmtime(files) > os.path.getmtime(raw_file):
+                    if args.verbose: print("[FORMAT] SKIP reformat header for {files}".format(**locals()))
             else:
-                if args.verbose: print("[FORMAT] EXEC reformat header for {accession_fa_file_name}".format(**locals()))
+                if args.verbose: print("[FORMAT] EXEC reformat header for {files}".format(**locals()))
                 
                 # open local raw genbank fasta
-                raw_file = open(accession_raw_file_name,'r')
+                raw_file = open(raw_file,'r')
                 raw_fa = raw_file.read()
                 raw_file.close()
 
                 # open local (header modified) version
-                fa_file  = open(accession_fa_file_name,'w')
+                fa_file  = open(files,'w')
 
                 # parse out header and seq
                 fa_desc = raw_fa.split("\n")[0].replace(">","")
@@ -470,7 +481,7 @@ def fetch_fasta(processed_accession_file_name):
                 # write ICTV formated header to fasta
                 fa_file.write(desc_line+"\n"+fa_seq)
                 fa_file.close()
-                if args.verbose: print('    wrote: '+accession_fa_file_name)
+                if args.verbose: print('    wrote: '+files)
                 
             count=count+1
 
