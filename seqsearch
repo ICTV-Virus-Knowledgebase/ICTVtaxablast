@@ -796,7 +796,7 @@ if __name__ == "__main__" :
    parser.add_argument('-html',help="output html base filename",default="tax_results")
    parser.add_argument('-blastdb',help="input blast base filename",default="./blast/ICTV_VMR_b")
    parser.add_argument('-db', help="BLAST database file", default="blast/ICTV_VMR_b")
-   parser.add_argument('-decode', help="Decode the input filenames from base64URL encoding before serializing the search results", default="")
+   parser.add_argument('-decode', action='store_true', help="Decode the input filenames from base64URL encoding before serializing the search results")
    parser.add_argument('-info', action='store_true', help="Display BLAST database info")
 
    args = parser.parse_args()
@@ -813,7 +813,7 @@ if __name__ == "__main__" :
    settings = Settings(
       blastdb = args.blastdb,
       db = args.db,
-      decode_filenames = True if args.decode.strip().lower() == "true" else False,
+      decode_filenames = args.decode,
       html = args.html,
       indir = args.indir,
       json_filename = args.json,
