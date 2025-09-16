@@ -128,7 +128,7 @@ class SequenceFile():
       self.extension = input_path.suffix
 
       # Determine the "readable" version of the input file's base name.
-      self.readable_basename = self.input_basename if not settings.decode_filenames else str(base64.urlsafe_b64decode(self.input_basename))
+      self.readable_basename = self.input_basename if not settings.decode_filenames else decode_file_basename(self.input_basename)
       
    # Get the sequence filename
    def get_filename(self) -> str:
@@ -336,6 +336,24 @@ def create_json_file() -> None:
    except Exception as e:
       print(f"Error writing JSON file: {e}")
       sys.exit(1)
+
+
+#---------------------------------------------------------------------------------------------------
+# Decode a Base64URL-encoded file's basename that has a record number suffix an underscore and 
+# the word "seq" followed by a 4 digit record number.
+#---------------------------------------------------------------------------------------------------
+def decode_file_basename(encoded_basename: str) -> str:
+      
+   # Trim and validate
+   encoded_basename = encoded_basename.strip()
+   if len(encoded_basename) < 1:
+      return ""
+
+   # If the basename ends with a suffix of the form "_seqNNNN" where NNNN is a 4 digit number, remove the suffix.
+   if re.search(r"/_seq\d{4}$/", encoded_basename):
+      encoded_basename = encoded_basename[0:len(encoded_basename) - 8]
+   
+   return str(base64.urlsafe_b64decode(encoded_basename))
 
 
 #---------------------------------------------------------------------------------------------------
