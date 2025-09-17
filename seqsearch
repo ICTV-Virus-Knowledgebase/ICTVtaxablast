@@ -353,7 +353,8 @@ def decode_file_basename(encoded_basename: str) -> str:
       return ""
 
    # If the basename ends with a suffix of the form "_seqNNNN" where NNNN is a 4 digit number, remove the suffix.
-   if re.search(r"/_seq\d{4}$/", encoded_basename):
+   if re.match(r".*_seq\d{4}$", encoded_basename) is not None:
+   #if re.search(r"/_seq\d{4}$/", encoded_basename):
       print("Found _seqNNNN suffix")
       encoded_basename = encoded_basename[0:len(encoded_basename) - 8]
    
