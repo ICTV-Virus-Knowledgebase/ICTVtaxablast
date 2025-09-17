@@ -344,6 +344,9 @@ def create_json_file() -> None:
 #---------------------------------------------------------------------------------------------------
 def decode_file_basename(encoded_basename: str) -> str:
       
+   # TESTING
+   print(f"in decode_file_basename: encoded_basename = {encoded_basename}")
+
    # Trim and validate
    encoded_basename = encoded_basename.strip()
    if len(encoded_basename) < 1:
@@ -351,8 +354,13 @@ def decode_file_basename(encoded_basename: str) -> str:
 
    # If the basename ends with a suffix of the form "_seqNNNN" where NNNN is a 4 digit number, remove the suffix.
    if re.search(r"/_seq\d{4}$/", encoded_basename):
+      print("Found _seqNNNN suffix")
       encoded_basename = encoded_basename[0:len(encoded_basename) - 8]
    
+   print(f"After (possibly) removing _seqNNNN suffix, encoded_basename = {encoded_basename}")
+
+   encoded_basename += '=' * (-len(encoded_basename) % 4)
+
    return str(base64.urlsafe_b64decode(encoded_basename))
 
 
@@ -442,6 +450,9 @@ def main() -> None:
       if not split_files or len(split_files) < 1:
          raise Exception("No FASTA files were found for processing\n")
 
+      # TESTING
+      print("About to process FASTA files")
+
       # Process all FASTA files
       for split_file in split_files:
          process_fasta_file(split_file)
@@ -459,7 +470,7 @@ def main() -> None:
       create_json_file()
 
    except Exception as e:
-      sys.stderr.write(f"\nThe following error occurred: {str(e)}")
+      sys.stderr.write(f"\nThe following error occurred: {str(e)}\n")
       exit(1)
 
 
@@ -723,7 +734,7 @@ def split_input_files() -> list[SequenceFile] | None:
       if sequences is None or len(sequences) < 1:
          continue
 
-      print(f"Found {len(sequences)} sequences in {input_file.name}\n")
+      print(f"Found {len(sequences)} sequence(s) in {input_file.name}\n")
 
       # Update the total sequence count.
       sequence_count += len(sequences)
