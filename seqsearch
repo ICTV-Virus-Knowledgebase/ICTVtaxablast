@@ -475,6 +475,8 @@ def process_fasta_file(sequence_file: SequenceFile):
    readable_filename = sequence_file.get_readable_filename()
    readable_input_filename = sequence_file.get_readable_input_filename()
 
+   print(f"TESTING: readable_filename = {readable_filename} and readable_input_filename = {readable_input_filename}\n")
+
    # Create a message specific to whether this is a split file and whether it's decoded.
    message = "\nProcessing FASTA file "
    if not sequence_file.is_split:
