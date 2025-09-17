@@ -344,9 +344,6 @@ def create_json_file() -> None:
 #---------------------------------------------------------------------------------------------------
 def decode_file_basename(encoded_basename: str) -> str:
       
-   # TESTING
-   print(f"in decode_file_basename: encoded_basename = {encoded_basename}")
-
    # Trim and validate
    encoded_basename = encoded_basename.strip()
    if len(encoded_basename) < 1:
@@ -354,15 +351,13 @@ def decode_file_basename(encoded_basename: str) -> str:
 
    # If the basename ends with a suffix of the form "_seqNNNN" where NNNN is a 4 digit number, remove the suffix.
    if re.match(r".*_seq\d{4}$", encoded_basename) is not None:
-   #if re.search(r"/_seq\d{4}$/", encoded_basename):
-      print("Found _seqNNNN suffix")
       encoded_basename = encoded_basename[0:len(encoded_basename) - 8]
    
-   print(f"After (possibly) removing _seqNNNN suffix, encoded_basename = {encoded_basename}")
-
+   # Add enough padding to make the string length a multiple of 4.
    encoded_basename += '=' * (-len(encoded_basename) % 4)
 
-   return str(base64.urlsafe_b64decode(encoded_basename))
+   # The name is decoded as binary and needs to be converted to a UTF-8 string.
+   return base64.urlsafe_b64decode(encoded_basename).decode("utf-8")
 
 
 #---------------------------------------------------------------------------------------------------
@@ -451,9 +446,6 @@ def main() -> None:
       if not split_files or len(split_files) < 1:
          raise Exception("No FASTA files were found for processing\n")
 
-      # TESTING
-      print("About to process FASTA files")
-
       # Process all FASTA files
       for split_file in split_files:
          process_fasta_file(split_file)
@@ -486,8 +478,6 @@ def process_fasta_file(sequence_file: SequenceFile):
    input_filename = sequence_file.get_input_filename()
    readable_filename = sequence_file.get_readable_filename()
    readable_input_filename = sequence_file.get_readable_input_filename()
-
-   print(f"TESTING: readable_filename = {readable_filename} and readable_input_filename = {readable_input_filename}\n")
 
    # Create a message specific to whether this is a split file and whether it's decoded.
    message = "\nProcessing FASTA file "
