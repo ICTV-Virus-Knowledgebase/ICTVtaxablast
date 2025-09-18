@@ -130,6 +130,8 @@ class SequenceFile():
       self.input_basename = input_path.stem
       self.extension = input_path.suffix
 
+      print("TEST: in SequenceFile c-tor")
+
       # Determine the "readable" version of the input file's base name.
       self.readable_basename = self.input_basename if not settings.decode_filenames else decode_file_basename(self.input_basename)
       
@@ -353,6 +355,8 @@ def create_json_file() -> None:
 #---------------------------------------------------------------------------------------------------
 def decode_file_basename(encoded_basename: str) -> str:
       
+   print(f"TEST in decode_file_basename with encoded_basename = {encoded_basename}")
+   
    # Trim and validate
    encoded_basename = encoded_basename.strip()
    if len(encoded_basename) < 1:
@@ -368,7 +372,7 @@ def decode_file_basename(encoded_basename: str) -> str:
    encoded_basename += "=" * ((4 * ceil(length/4)) - length)
 
    print(f"TEST: before base64url decoding the encoded_basename = {encoded_basename}")
-   
+
    # The name is decoded as binary and needs to be converted to a UTF-8 string.
    return base64.urlsafe_b64decode(encoded_basename).decode("utf-8")
 
