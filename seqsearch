@@ -367,6 +367,8 @@ def decode_file_basename(encoded_basename: str) -> str:
    # Add enough padding to make the string length a multiple of 4.
    encoded_basename += "=" * ((4 * ceil(length/4)) - length)
 
+   print(f"TEST: before base64url decoding the encoded_basename = {encoded_basename}")
+   
    # The name is decoded as binary and needs to be converted to a UTF-8 string.
    return base64.urlsafe_b64decode(encoded_basename).decode("utf-8")
 
