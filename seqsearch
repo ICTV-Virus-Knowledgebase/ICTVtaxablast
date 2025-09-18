@@ -109,17 +109,19 @@ class SequenceFile():
    # The length of the file's FASTA sequence.
    sequence_length: int
 
+   # For files with multiple sequences/records, this is the record's index in the original input file.
+   sequence_number: int | None
+
    # For split files, the text added to the base filename.
    split_identifier: str|None
 
-   
 
    # C-tor
-   def __init__(self, input_filename: str, is_split: bool, sequence_length: int, split_identifier: str = ""):
+   def __init__(self, input_filename: str, is_split: bool, sequence_length: int, sequence_number: int | None = None):
 
       self.is_split = is_split
       self.sequence_length = sequence_length
-      self.split_identifier = split_identifier
+      self.sequence_number = sequence_number
 
       input_path = Path(input_filename)
 
@@ -132,7 +134,10 @@ class SequenceFile():
       
    # Get the sequence filename
    def get_filename(self) -> str:
-      return f"{self.input_basename}{self.split_identifier}{self.extension}"
+
+      suffix = "" if self.sequence_number == None else generate_fasta_basename_suffix(self.sequence_number)
+
+      return f"{self.input_basename}{suffix}{self.extension}"
    
    # Get the input filename
    def get_input_filename(self) -> str:
@@ -140,7 +145,10 @@ class SequenceFile():
    
    # Get a readable version of the sequence filename.
    def get_readable_filename(self) -> str:
-      return f"{self.readable_basename}{self.split_identifier}{self.extension}"
+
+      suffix = "" if self.sequence_number == None else generate_fasta_basename_suffix(self.sequence_number)
+
+      return f"{self.readable_basename}{suffix}{self.extension}"
    
    # Get a readable version of the input filename.
    def get_readable_input_filename(self) -> str:
@@ -361,6 +369,25 @@ def decode_file_basename(encoded_basename: str) -> str:
 
 
 #---------------------------------------------------------------------------------------------------
+# Generate a suffix for the basename based on the record number.
+# The suffix will be an underscore and the word "seq" followed by a 4 digit record number.
+#---------------------------------------------------------------------------------------------------
+def generate_fasta_basename_suffix(recordNumber: int) -> str:
+      
+   digits = ""
+
+   if recordNumber < 1000:
+      if recordNumber >= 100:
+         digits = "0"
+      elif recordNumber >= 10: 
+         digits = "00"
+      else:
+         digits = "000"
+
+   return f"_seq{digits}{str(recordNumber)}"
+
+   
+#---------------------------------------------------------------------------------------------------
 # Use blastdbcmd to determine the BLAST database title.
 #---------------------------------------------------------------------------------------------------
 def get_database_title() -> str:
@@ -494,8 +521,7 @@ def process_fasta_file(sequence_file: SequenceFile):
    
    print(message)
 
-   # Look for the input file's data in json_results. If it hasn't been added yet,
-   # create a new input file data object.
+   # Look for the input file's data in json_results. If it hasn't been added yet, create a new input file data object.
    if input_filename in file_data_lookup:
       input_file_data = file_data_lookup[input_filename]
    else:
@@ -769,7 +795,7 @@ def split_input_files() -> list[SequenceFile] | None:
             continue
 
          # Create a sequence file object for the split file.
-         sequence_file = SequenceFile(input_file.name, is_split, len(sequence.seq), f".{s}")
+         sequence_file = SequenceFile(input_file.name, is_split, len(sequence.seq), s)
 
          # Create a path for the sequence file.
          sequence_path = seq_files_path / sequence_file.get_filename()
@@ -781,7 +807,6 @@ def split_input_files() -> list[SequenceFile] | None:
          sequence_files.append(sequence_file)
 
    return sequence_files
-
 
 
 
