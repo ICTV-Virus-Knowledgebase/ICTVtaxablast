@@ -10,7 +10,7 @@ Validate taht there is a 2nd worksheet named "Original". That contains the "orig
 
 Validate that both worksheets exist, and throw a hard error if they dont.
 Validate that the updated records has data in columns A:AG, and that the headers match the example I have attached (create a hard-coded list of required columns from the attached spreadsheet). 
-Validate that "Original" exists, also with headers in A:AG, as shown in the upload.
+Validate that "Original" exists, also with headers in A:AG, as shown in the exmaple VMR.xlsx: "VMRs/VMR_MSL40.v1.20250307.editor_DBS_22 July.xlsx"
 
 If either worksheet is missing, or has incorrect header rows contents, issue an informative, human-readable error, and exit. For example, enumerate which column headers are missing, if some are.
 
@@ -26,7 +26,8 @@ The program should create two output .sql files, using MariaDB style SQL, with t
    The comments in those SQL files must include the name of the input VMR...xlsx file and the date they were generated, as well as the version of this script (from version_git.txt)
    "vmr_updates" will have SQL update statements, one for each record, that will update just the cells that differ between "updated" and "original", settting them to the "updated" values in the database, if they aren't already set to that.
    "vmr_inserts" will insert the records in "updated" that are new (are blank in "Isolate ID").
-The table to insert and update is "species_isolates", the MariaDB create table statement of which is also attached.
+The table to insert and update is "species_isolates", the MariaDB create table statement of which is found at "git add "prompts/species_isolates_Table.sql".
+
 Before generating the SQL, the program should sanity check the data, assuming that all updates are done before any inserts: 
        1. no new records should duplicate any existing record's accessions. 
        2. there can only be one row with
@@ -54,6 +55,6 @@ Changing the value of a read-only column should be an error.
 
 The columns in the "udpated" worksheet from AD: "QC_Status" and afterwards should be ignored.
 
-The uploaded example contains formulas in the sheet "SQLupdates", in row 2, that generate MSSQL style SQL update statements, and excel formulas in sheet "SQLinserts", in row 2, that generate MSSQL style SQL insert. Use those as templates for writing the python code that will generate MariaDB style SQL. Do not update values that have not changed. Those excel formulas can also be used to extract the column name mappings to the SQL table. 
+The example VMRF.xlsx contains formulas in the sheet "SQLupdates", in row 2, that generate MSSQL style SQL update statements, and excel formulas in sheet "SQLinserts", in row 2, that generate MSSQL style SQL insert. Use those as templates for writing the python code that will generate MariaDB style SQL. Do not update values that have not changed. Those excel formulas can also be used to extract the column name mappings to the SQL table. 
 
 
