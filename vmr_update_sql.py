@@ -1,0 +1,850 @@
+#!/usr/bin/env python3
+"""Generate SQL update and insert scripts from an ICTV VMR workbook."""
+
+from __future__ import annotations
+
+import argparse
+import math
+import re
+import sys
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from numbers import Integral, Real
+from pathlib import Path
+from typing import List, Optional, Sequence, Tuple
+
+import pandas as pd
+
+DEFAULT_WORKBOOK = Path("./VMRs/VMR_MSL40.v1.20250307.editor_DBS_22 July.xlsx")
+ERROR_FILENAME = "errors.xlsx"
+UPDATES_FILENAME = "vmr_1_updates.sql"
+INSERTS_FILENAME = "vmr_2_inserts.sql"
+VERSION_FILE = Path("version_git.txt")
+
+# Columns A:AG that must appear (in order) on the worksheets we process.
+REQUIRED_COLUMNS: List[str] = [
+    "Isolate ID",
+    "Species Sort",
+    "Isolate Sort",
+    "Realm",
+    "Subrealm",
+    "Kingdom",
+    "Subkingdom",
+    "Phylum",
+    "Subphylum",
+    "Class",
+    "Subclass",
+    "Order",
+    "Suborder",
+    "Family",
+    "Subfamily",
+    "Genus",
+    "Subgenus",
+    "Species",
+    "ICTV_ID",
+    "Exemplar or additional isolate",
+    "Virus name(s)",
+    "Virus name abbreviation(s)",
+    "Virus isolate designation",
+    "Virus GENBANK accession",
+    "Genome coverage",
+    "Genome",
+    "Host source",
+    "Accessions Link",
+    "Editor Notes",
+    "QC_status",
+    "QC_taxon_inher_molecule",
+    "QC_taxon_change",
+    "QC_taxon_proposal",
+]
+
+READ_ONLY_COLUMNS = {
+    "Isolate ID",
+    "Species Sort",
+    "Realm",
+    "Subrealm",
+    "Kingdom",
+    "Subkingdom",
+    "Phylum",
+    "Subphylum",
+    "Class",
+    "Subclass",
+    "Order",
+    "Suborder",
+    "Family",
+    "Subfamily",
+    "Genus",
+    "Subgenus",
+    "ICTV_ID",
+    "Accessions Link",
+}
+
+# Mapping of VMR columns to SQL columns when generating UPDATE statements.
+UPDATABLE_TO_SQL = {
+    "Isolate Sort": "isolate_sort",
+    "Species": "species_name",
+    "Exemplar or additional isolate": "isolate_type",
+    "Virus name(s)": "isolate_names",
+    "Virus name abbreviation(s)": "isolate_abbrevs",
+    "Virus isolate designation": "isolate_designation",
+    "Virus GENBANK accession": "genbank_accessions",
+    "Genome coverage": "genome_coverage",
+    "Genome": "molecule",
+    "Host source": "host_source",
+    "Editor Notes": "notes",
+}
+
+# Mapping used when creating INSERT statements for new records.
+INSERT_COLUMN_MAPPING: Sequence[Tuple[str, str]] = (
+    ("taxnode_id", "ICTV_ID"),
+    ("species_sort", "Species Sort"),
+    ("isolate_sort", "Isolate Sort"),
+    ("species_name", "Species"),
+    ("isolate_type", "Exemplar or additional isolate"),
+    ("isolate_names", "Virus name(s)"),
+    ("isolate_abbrevs", "Virus name abbreviation(s)"),
+    ("isolate_designation", "Virus isolate designation"),
+    ("genbank_accessions", "Virus GENBANK accession"),
+    ("genome_coverage", "Genome coverage"),
+    ("molecule", "Genome"),
+    ("host_source", "Host source"),
+    ("accession_links", "Accessions Link"),
+    ("notes", "Editor Notes"),
+)
+
+INT_COLUMNS = {"taxnode_id", "species_sort", "isolate_sort"}
+INVALID_VALUE = object()
+
+
+class ProcessingHalted(Exception):
+    """Raised when validation should stop immediately."""
+
+
+@dataclass
+class ErrorEntry:
+    filename: str
+    worksheet: str
+    row: Optional[int]
+    message: str
+
+
+@dataclass
+class UpdateEntry:
+    isolate_id: str
+    numeric_id: int
+    row_number: int
+    assignments: List[Tuple[str, Optional[object]]]
+
+
+@dataclass
+class InsertEntry:
+    row_number: int
+    values: List[Tuple[str, Optional[object]]]
+
+
+@dataclass
+class ProcessResult:
+    updated_sheet: Optional[str]
+    update_entries: List[UpdateEntry]
+    insert_entries: List[InsertEntry]
+
+
+class ErrorCollector:
+    """Collects errors and enforces the stop/continue policy."""
+
+    def __init__(self, keep_going: bool) -> None:
+        self.keep_going = keep_going
+        self.entries: List[ErrorEntry] = []
+
+    def add(self, filename: str, worksheet: str, row: Optional[int], message: str) -> None:
+        entry = ErrorEntry(filename, worksheet, row, message)
+        self.entries.append(entry)
+        location = filename
+        if worksheet:
+            location += f"::{worksheet}"
+        if row is not None:
+            location += f" row {row}"
+        print(f"ERROR: {location} - {message}", file=sys.stderr)
+        if not self.keep_going:
+            raise ProcessingHalted(message)
+
+    def has_errors(self) -> bool:
+        return bool(self.entries)
+
+    def extend_with_exception(self, filename: str, exc: Exception) -> None:
+        self.entries.append(ErrorEntry(filename, "", None, f"Unhandled exception: {exc!r}"))
+        print(f"ERROR: {filename} - Unhandled exception: {exc!r}", file=sys.stderr)
+
+    def write_excel(self, output_path: Path) -> None:
+        data = {
+            "filename": [entry.filename for entry in self.entries],
+            "worksheet": [entry.worksheet for entry in self.entries],
+            "row": [entry.row for entry in self.entries],
+            "message": [entry.message for entry in self.entries],
+        }
+        df = pd.DataFrame(data)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_excel(output_path, index=False)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Validate a VMR workbook and generate MariaDB SQL update and insert scripts."
+        )
+    )
+    parser.add_argument(
+        "workbook",
+        nargs="?",
+        default=str(DEFAULT_WORKBOOK),
+        help="Path to the VMR Excel workbook (default: %(default)s)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        help=(
+            "Directory where SQL and error reports are written. Default is the"
+            " workbook filename without the .xlsx suffix."
+        ),
+    )
+    parser.add_argument(
+        "-k",
+        "--keep-going",
+        action="store_true",
+        help="Continue processing after encountering validation errors.",
+    )
+    parser.add_argument(
+        "--updates-sql",
+        default=UPDATES_FILENAME,
+        help="Filename for UPDATE statements (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--inserts-sql",
+        default=INSERTS_FILENAME,
+        help="Filename for INSERT statements (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--errors-xlsx",
+        default=ERROR_FILENAME,
+        help="Filename for the error report workbook (default: %(default)s)",
+    )
+    return parser.parse_args()
+
+
+def read_version() -> str:
+    if VERSION_FILE.exists():
+        return VERSION_FILE.read_text(encoding="utf-8").strip()
+    fallback = Path("version.txt")
+    if fallback.exists():
+        return fallback.read_text(encoding="utf-8").strip()
+    return "unknown"
+
+
+def normalize_string(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    if isinstance(value, bytes):
+        stripped = value.decode("utf-8", errors="ignore").strip()
+        return stripped or None
+    if isinstance(value, Real):
+        if isinstance(value, float) and math.isnan(value):
+            return None
+        return str(value)
+    return str(value).strip() or None
+
+
+def normalize_int_like(value: object) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, Integral):
+        return int(value)
+    if isinstance(value, Real):
+        if math.isnan(value):
+            return None
+        if float(value).is_integer():
+            return int(value)
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            number = float(stripped)
+        except ValueError:
+            return None
+        if math.isnan(number):
+            return None
+        if number.is_integer():
+            return int(number)
+        return None
+    return None
+
+
+def normalize_isolate_type(value: object) -> Optional[str]:
+    text = normalize_string(value)
+    if text is None:
+        return None
+    text = text.upper()
+    if text in {"E", "A"}:
+        return text
+    if text.startswith("EXEM"):
+        return "E"
+    if text.startswith("ADD"):
+        return "A"
+    return None
+
+
+def values_equal(original: object, updated: object, column: str) -> bool:
+    if column == "Exemplar or additional isolate":
+        return normalize_isolate_type(original) == normalize_isolate_type(updated)
+    if column in {"Isolate Sort", "Species Sort"}:
+        return normalize_int_like(original) == normalize_int_like(updated)
+    return normalize_string(original) == normalize_string(updated)
+
+
+def normalize_isolate_id(value: object) -> Optional[str]:
+    text = normalize_string(value)
+    if not text:
+        return None
+    return text.upper()
+
+
+def extract_isolate_numeric(isolate_id: str) -> Optional[int]:
+    match = re.fullmatch(r"VMR(\d+)", isolate_id)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def excel_row(index: int) -> int:
+    return int(index) + 2
+
+
+def validate_headers(
+    filename: str,
+    sheet_name: str,
+    actual_columns: Sequence[str],
+    errors: ErrorCollector,
+) -> None:
+    expected_len = len(REQUIRED_COLUMNS)
+    if len(actual_columns) < expected_len:
+        missing = REQUIRED_COLUMNS[len(actual_columns) :]
+        errors.add(
+            filename,
+            sheet_name,
+            None,
+            "Worksheet is missing required columns: " + ", ".join(missing),
+        )
+        return
+    for idx, expected in enumerate(REQUIRED_COLUMNS):
+        actual = actual_columns[idx]
+        if actual != expected:
+            errors.add(
+                filename,
+                sheet_name,
+                None,
+                f"Column {idx + 1} mismatch: expected '{expected}' but found '{actual}'",
+            )
+
+
+def prepare_dataframe(workbook: Path, sheet_name: str) -> pd.DataFrame:
+    df = pd.read_excel(workbook, sheet_name=sheet_name, usecols=REQUIRED_COLUMNS)
+    df = df.copy()
+    df["__row_number"] = (df.index + 2).astype(int)
+    df["__isolate_id"] = df["Isolate ID"].apply(normalize_isolate_id)
+    return df
+
+
+def determine_updated_sheet(
+    sheet_names: Sequence[str], workbook_name: str, errors: ErrorCollector
+) -> Optional[str]:
+    pattern = re.compile(r"VMR MSL\d+")
+    matches = [name for name in sheet_names if pattern.fullmatch(name)]
+    if not matches:
+        errors.add(
+            workbook_name,
+            "",
+            None,
+            "Workbook does not contain a worksheet named like 'VMR MSL[0-9]+'.",
+        )
+        return None
+    if len(matches) > 1:
+        errors.add(
+            workbook_name,
+            "",
+            None,
+            "Multiple updated worksheets found: " + ", ".join(matches),
+        )
+    return matches[0]
+
+
+def check_original_ids(original_df: pd.DataFrame, workbook_name: str, errors: ErrorCollector) -> None:
+    for _, row in original_df.iterrows():
+        if row["__isolate_id"] is None:
+            errors.add(
+                workbook_name,
+                "Original",
+                int(row["__row_number"]),
+                "Original worksheet contains a blank Isolate ID.",
+            )
+
+
+def check_isolate_ids(
+    updated_df: pd.DataFrame,
+    original_df: pd.DataFrame,
+    workbook_name: str,
+    updated_sheet: str,
+    errors: ErrorCollector,
+) -> None:
+    updated_existing = updated_df[updated_df["__isolate_id"].notna()]
+    original_existing = original_df[original_df["__isolate_id"].notna()]
+
+    for df, sheet in ((updated_existing, updated_sheet), (original_existing, "Original")):
+        for _, row in df.iterrows():
+            isolate_id = row["__isolate_id"]
+            if isolate_id and not re.fullmatch(r"VMR\d+", isolate_id):
+                errors.add(
+                    workbook_name,
+                    sheet,
+                    int(row["__row_number"]),
+                    f"Invalid Isolate ID format: {row['Isolate ID']}",
+                )
+
+    for df, sheet in ((updated_existing, updated_sheet), (original_existing, "Original")):
+        counts = df["__isolate_id"].value_counts()
+        for isolate_id, count in counts.items():
+            if count > 1:
+                rows = df.loc[df["__isolate_id"] == isolate_id, "__row_number"].astype(int).tolist()
+                rows_str = ", ".join(str(r) for r in rows)
+                errors.add(
+                    workbook_name,
+                    sheet,
+                    rows[0],
+                    f"Isolate ID {isolate_id} appears multiple times (rows {rows_str}).",
+                )
+
+    updated_ids = set(updated_existing["__isolate_id"])
+    original_ids = set(original_existing["__isolate_id"])
+
+    for isolate_id in sorted(updated_ids - original_ids):
+        row_num = int(
+            updated_existing.loc[updated_existing["__isolate_id"] == isolate_id, "__row_number"].iloc[0]
+        )
+        errors.add(
+            workbook_name,
+            updated_sheet,
+            row_num,
+            f"Isolate ID {isolate_id} not present in Original worksheet.",
+        )
+
+    for isolate_id in sorted(original_ids - updated_ids):
+        row_num = int(
+            original_existing.loc[original_existing["__isolate_id"] == isolate_id, "__row_number"].iloc[0]
+        )
+        errors.add(
+            workbook_name,
+            "Original",
+            row_num,
+            f"Isolate ID {isolate_id} missing from updated worksheet.",
+        )
+
+
+def enforce_read_only(
+    updated_df: pd.DataFrame,
+    original_df: pd.DataFrame,
+    workbook_name: str,
+    updated_sheet: str,
+    errors: ErrorCollector,
+) -> None:
+    updated_map = updated_df.set_index("__isolate_id")
+    original_map = original_df.set_index("__isolate_id")
+    for isolate_id, orig_row in original_map.iterrows():
+        if isolate_id not in updated_map.index or isolate_id is None:
+            continue
+        upd_row = updated_map.loc[isolate_id]
+        if isinstance(upd_row, pd.DataFrame):
+            continue
+        for column in READ_ONLY_COLUMNS:
+            if column == "Isolate ID":
+                continue
+            if not values_equal(orig_row[column], upd_row[column], column):
+                errors.add(
+                    workbook_name,
+                    updated_sheet,
+                    int(upd_row["__row_number"]),
+                    f"Read-only column '{column}' changed for isolate {isolate_id}.",
+                )
+
+
+def parse_accession_tokens(value: object) -> List[str]:
+    text = normalize_string(value)
+    if not text:
+        return []
+    tokens: List[str] = []
+    for fragment in re.split(r"[;\n]+", text):
+        part = fragment.strip()
+        if not part:
+            continue
+        if ":" in part:
+            part = part.split(":", 1)[1].strip()
+        if part:
+            tokens.append(part.upper())
+    return tokens
+
+
+def check_new_record_accessions(
+    updated_df: pd.DataFrame,
+    original_df: pd.DataFrame,
+    workbook_name: str,
+    updated_sheet: str,
+    errors: ErrorCollector,
+) -> None:
+    new_rows = updated_df[updated_df["__isolate_id"].isna()]
+    if new_rows.empty:
+        return
+
+    existing_map: dict[str, int] = {}
+    for _, row in original_df.iterrows():
+        row_number = int(row["__row_number"])
+        for token in parse_accession_tokens(row["Virus GENBANK accession"]):
+            existing_map.setdefault(token, row_number)
+
+    seen_new: dict[str, int] = {}
+    for _, row in new_rows.iterrows():
+        row_number = int(row["__row_number"])
+        tokens = parse_accession_tokens(row["Virus GENBANK accession"])
+        duplicates = sorted({token for token in tokens if token in existing_map})
+        if duplicates:
+            refs = [
+                f"{token} (Original row {existing_map[token]})" for token in duplicates
+            ]
+            errors.add(
+                workbook_name,
+                updated_sheet,
+                row_number,
+                "New record reuses existing accession(s): " + ", ".join(refs),
+            )
+        for token in tokens:
+            if token in seen_new and seen_new[token] != row_number:
+                errors.add(
+                    workbook_name,
+                    updated_sheet,
+                    row_number,
+                    f"Accession {token} already used by new row {seen_new[token]}",
+                )
+            else:
+                seen_new[token] = row_number
+
+
+def convert_value(
+    sql_column: str,
+    vmr_value: object,
+    vmr_column: str,
+    workbook_name: str,
+    sheet_name: str,
+    row_number: int,
+    errors: ErrorCollector,
+) -> object:
+    text = normalize_string(vmr_value)
+    if sql_column == "taxnode_id":
+        if text is None:
+            return None
+        match = re.fullmatch(r"ICTV(\d+)", text.upper())
+        if not match:
+            errors.add(
+                workbook_name,
+                sheet_name,
+                row_number,
+                "Column 'ICTV_ID' must resemble ICTV######## to derive taxnode_id.",
+            )
+            return INVALID_VALUE
+        return int(match.group(1))
+    if sql_column in INT_COLUMNS:
+        result = normalize_int_like(vmr_value)
+        if result is None and text is not None:
+            errors.add(
+                workbook_name,
+                sheet_name,
+                row_number,
+                f"Column '{vmr_column}' must contain an integer value.",
+            )
+            return INVALID_VALUE
+        return result
+    if sql_column == "isolate_type":
+        if text is None:
+            return None
+        result = normalize_isolate_type(vmr_value)
+        if result is None:
+            errors.add(
+                workbook_name,
+                sheet_name,
+                row_number,
+                f"Column '{vmr_column}' must contain 'E' or 'A'.",
+            )
+            return INVALID_VALUE
+        return result
+    return text
+
+
+def build_update_entries(
+    updated_df: pd.DataFrame,
+    original_df: pd.DataFrame,
+    workbook_name: str,
+    updated_sheet: str,
+    errors: ErrorCollector,
+) -> List[UpdateEntry]:
+    entries: List[UpdateEntry] = []
+    updated_existing = updated_df[updated_df["__isolate_id"].notna()].set_index("__isolate_id")
+    original_existing = original_df[original_df["__isolate_id"].notna()].set_index("__isolate_id")
+
+    for isolate_id, orig_row in original_existing.iterrows():
+        if isolate_id not in updated_existing.index:
+            continue
+        upd_row = updated_existing.loc[isolate_id]
+        if isinstance(upd_row, pd.DataFrame):
+            continue
+        changes: List[Tuple[str, Optional[object]]] = []
+        invalid = False
+        for vmr_column, sql_column in UPDATABLE_TO_SQL.items():
+            orig_value = orig_row[vmr_column]
+            upd_value = upd_row[vmr_column]
+            if values_equal(orig_value, upd_value, vmr_column):
+                continue
+            converted = convert_value(
+                sql_column,
+                upd_value,
+                vmr_column,
+                workbook_name,
+                updated_sheet,
+                int(upd_row["__row_number"]),
+                errors,
+            )
+            if converted is INVALID_VALUE:
+                invalid = True
+                continue
+            changes.append((sql_column, converted))
+        if invalid or not changes:
+            continue
+        numeric_id = extract_isolate_numeric(isolate_id)
+        if numeric_id is None:
+            errors.add(
+                workbook_name,
+                updated_sheet,
+                int(upd_row["__row_number"]),
+                f"Isolate ID '{isolate_id}' cannot be converted to numeric form.",
+            )
+            continue
+        entries.append(
+            UpdateEntry(
+                isolate_id=isolate_id,
+                numeric_id=numeric_id,
+                row_number=int(upd_row["__row_number"]),
+                assignments=changes,
+            )
+        )
+    return entries
+
+
+def build_insert_entries(
+    updated_df: pd.DataFrame,
+    workbook_name: str,
+    updated_sheet: str,
+    errors: ErrorCollector,
+) -> List[InsertEntry]:
+    entries: List[InsertEntry] = []
+    new_rows = updated_df[updated_df["__isolate_id"].isna()]
+    for _, row in new_rows.iterrows():
+        row_number = int(row["__row_number"])
+        values: List[Tuple[str, Optional[object]]] = []
+        invalid = False
+        for sql_column, vmr_column in INSERT_COLUMN_MAPPING:
+            converted = convert_value(
+                sql_column,
+                row[vmr_column],
+                vmr_column,
+                workbook_name,
+                updated_sheet,
+                row_number,
+                errors,
+            )
+            if converted is INVALID_VALUE:
+                invalid = True
+            values.append((sql_column, None if converted is INVALID_VALUE else converted))
+        if invalid:
+            continue
+        entries.append(InsertEntry(row_number=row_number, values=values))
+    return entries
+
+
+def generate_sql_header(workbook_path: Path, version: str) -> List[str]:
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S %Z")
+    return [
+        f"-- Source workbook: {workbook_path}",
+        f"-- Generated: {timestamp}",
+        f"-- Script version: {version}",
+        "",
+    ]
+
+
+def format_sql_value(column: str, value: Optional[object]) -> str:
+    if value is None:
+        return "NULL"
+    if column in INT_COLUMNS and isinstance(value, Real):
+        return str(int(value))
+    if isinstance(value, Integral):
+        return str(int(value))
+    text = str(value).replace("'", "''")
+    return f"'{text}'"
+
+
+def build_update_sql_text(
+    entries: List[UpdateEntry], workbook_path: Path, version: str
+) -> str:
+    lines = generate_sql_header(workbook_path, version)
+    if not entries:
+        lines.append("-- No updates required.")
+        return "\n".join(lines) + "\n"
+    for entry in entries:
+        lines.append(f"-- {entry.isolate_id} (worksheet row {entry.row_number})")
+        lines.append("UPDATE species_isolates")
+        lines.append("SET")
+        assignments = [
+            f"    {column} = {format_sql_value(column, value)}"
+            for column, value in entry.assignments
+        ]
+        lines.append(",\n".join(assignments))
+        lines.append(f"WHERE isolate_id = {entry.numeric_id};")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def build_insert_sql_text(
+    entries: List[InsertEntry], workbook_path: Path, version: str
+) -> str:
+    lines = generate_sql_header(workbook_path, version)
+    if not entries:
+        lines.append("-- No inserts required.")
+        return "\n".join(lines) + "\n"
+    for entry in entries:
+        lines.append(f"-- Worksheet row {entry.row_number}")
+        columns = [column for column, _ in entry.values]
+        values = [format_sql_value(column, value) for column, value in entry.values]
+        lines.append("INSERT INTO species_isolates (")
+        lines.append("    " + ",\n    ".join(columns))
+        lines.append(") VALUES (")
+        lines.append("    " + ",\n    ".join(values))
+        lines.append(");")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def build_placeholder_sql_text(
+    workbook_path: Path, version: str, note: str
+) -> str:
+    lines = generate_sql_header(workbook_path, version)
+    lines.append(f"-- {note}")
+    return "\n".join(lines) + "\n"
+
+
+def process_workbook(
+    workbook_path: Path, workbook_name: str, errors: ErrorCollector
+) -> ProcessResult:
+    with pd.ExcelFile(workbook_path) as xl:
+        sheet_names = xl.sheet_names
+
+    updated_sheet = determine_updated_sheet(sheet_names, workbook_name, errors)
+    if updated_sheet is None or "Original" not in sheet_names:
+        if "Original" not in sheet_names:
+            errors.add(
+                workbook_name,
+                "",
+                None,
+                "Workbook does not contain an 'Original' worksheet.",
+            )
+        return ProcessResult(updated_sheet, [], [])
+
+    updated_headers = pd.read_excel(workbook_path, sheet_name=updated_sheet, nrows=0).columns
+    validate_headers(workbook_name, updated_sheet, list(updated_headers), errors)
+
+    original_headers = pd.read_excel(workbook_path, sheet_name="Original", nrows=0).columns
+    validate_headers(workbook_name, "Original", list(original_headers), errors)
+
+    updated_df = prepare_dataframe(workbook_path, updated_sheet)
+    original_df = prepare_dataframe(workbook_path, "Original")
+
+    check_original_ids(original_df, workbook_name, errors)
+    check_isolate_ids(updated_df, original_df, workbook_name, updated_sheet, errors)
+    enforce_read_only(updated_df, original_df, workbook_name, updated_sheet, errors)
+    check_new_record_accessions(updated_df, original_df, workbook_name, updated_sheet, errors)
+
+    update_entries = build_update_entries(updated_df, original_df, workbook_name, updated_sheet, errors)
+    insert_entries = build_insert_entries(updated_df, workbook_name, updated_sheet, errors)
+
+    return ProcessResult(updated_sheet, update_entries, insert_entries)
+
+
+def write_sql_outputs(
+    output_dir: Path,
+    args: argparse.Namespace,
+    result: ProcessResult,
+    workbook_path: Path,
+    version: str,
+    had_errors: bool,
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    updates_path = output_dir / args.updates_sql
+    inserts_path = output_dir / args.inserts_sql
+    workbook_display = workbook_path.resolve()
+
+    if had_errors or result.updated_sheet is None:
+        note = "Errors encountered; SQL generation skipped."
+        placeholder = build_placeholder_sql_text(workbook_display, version, note)
+        updates_path.write_text(placeholder, encoding="utf-8")
+        inserts_path.write_text(placeholder, encoding="utf-8")
+        return
+
+    updates_sql = build_update_sql_text(result.update_entries, workbook_display, version)
+    inserts_sql = build_insert_sql_text(result.insert_entries, workbook_display, version)
+    updates_path.write_text(updates_sql, encoding="utf-8")
+    inserts_path.write_text(inserts_sql, encoding="utf-8")
+
+
+def main() -> None:
+    args = parse_args()
+    workbook_path = Path(args.workbook).expanduser()
+    if args.output_dir:
+        output_dir = Path(args.output_dir).expanduser()
+    else:
+        output_dir = Path(Path(args.workbook).name).with_suffix("")
+
+    errors = ErrorCollector(keep_going=args.keep_going)
+    version = read_version()
+    result = ProcessResult(None, [], [])
+
+    if not workbook_path.exists():
+        errors.add(
+            workbook_path.name,
+            "",
+            None,
+            f"Workbook not found: {workbook_path}",
+        )
+    else:
+        try:
+            result = process_workbook(workbook_path, workbook_path.name, errors)
+        except ProcessingHalted:
+            pass
+        except Exception as exc:  # pragma: no cover - defensive programming
+            errors.extend_with_exception(workbook_path.name, exc)
+
+    errors.write_excel(output_dir / args.errors_xlsx)
+    write_sql_outputs(output_dir, args, result, workbook_path, version, errors.has_errors())
+
+    if errors.has_errors():
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

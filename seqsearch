@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 import re
 import pandas as pd
 import json
+from math import ceil
 import os
 import sys
 import shutil
@@ -109,17 +110,19 @@ class SequenceFile():
    # The length of the file's FASTA sequence.
    sequence_length: int
 
+   # For files with multiple sequences/records, this is the record's index in the original input file.
+   sequence_number: int | None
+
    # For split files, the text added to the base filename.
    split_identifier: str|None
 
-   
 
    # C-tor
-   def __init__(self, input_filename: str, is_split: bool, sequence_length: int, split_identifier: str = ""):
+   def __init__(self, input_filename: str, is_split: bool, sequence_length: int, sequence_number: int | None = None):
 
       self.is_split = is_split
       self.sequence_length = sequence_length
-      self.split_identifier = split_identifier
+      self.sequence_number = sequence_number
 
       input_path = Path(input_filename)
 
@@ -127,12 +130,17 @@ class SequenceFile():
       self.input_basename = input_path.stem
       self.extension = input_path.suffix
 
+      print("TEST: in SequenceFile c-tor")
+
       # Determine the "readable" version of the input file's base name.
-      self.readable_basename = self.input_basename if not settings.decode_filenames else str(base64.urlsafe_b64decode(self.input_basename))
+      self.readable_basename = self.input_basename if not settings.decode_filenames else decode_file_basename(self.input_basename)
       
    # Get the sequence filename
    def get_filename(self) -> str:
-      return f"{self.input_basename}{self.split_identifier}{self.extension}"
+
+      suffix = "" if self.sequence_number == None else generate_fasta_basename_suffix(self.sequence_number)
+
+      return f"{self.input_basename}{suffix}{self.extension}"
    
    # Get the input filename
    def get_input_filename(self) -> str:
@@ -140,7 +148,10 @@ class SequenceFile():
    
    # Get a readable version of the sequence filename.
    def get_readable_filename(self) -> str:
-      return f"{self.readable_basename}{self.split_identifier}{self.extension}"
+
+      suffix = "" if self.sequence_number == None else generate_fasta_basename_suffix(self.sequence_number)
+
+      return f"{self.readable_basename}{suffix}{self.extension}"
    
    # Get a readable version of the input filename.
    def get_readable_input_filename(self) -> str:
@@ -339,6 +350,53 @@ def create_json_file() -> None:
 
 
 #---------------------------------------------------------------------------------------------------
+# Decode a Base64URL-encoded file's basename that has a record number suffix an underscore and 
+# the word "seq" followed by a 4 digit record number.
+#---------------------------------------------------------------------------------------------------
+def decode_file_basename(encoded_basename: str) -> str:
+      
+   print(f"TEST in decode_file_basename with encoded_basename = {encoded_basename}")
+   
+   # Trim and validate
+   encoded_basename = encoded_basename.strip()
+   if len(encoded_basename) < 1:
+      return ""
+
+   # If the basename ends with a suffix of the form "_seqNNNN" where NNNN is a 4 digit number, remove the suffix.
+   if re.match(r".*_seq\d{4}$", encoded_basename) is not None:
+      encoded_basename = encoded_basename[0:len(encoded_basename) - 8]
+   
+   length = len(encoded_basename)
+
+   # Add enough padding to make the string length a multiple of 4.
+   encoded_basename += "=" * ((4 * ceil(length/4)) - length)
+
+   print(f"TEST: before base64url decoding the encoded_basename = {encoded_basename}")
+
+   # The name is decoded as binary and needs to be converted to a UTF-8 string.
+   return base64.urlsafe_b64decode(encoded_basename).decode("utf-8")
+
+
+#---------------------------------------------------------------------------------------------------
+# Generate a suffix for the basename based on the record number.
+# The suffix will be an underscore and the word "seq" followed by a 4 digit record number.
+#---------------------------------------------------------------------------------------------------
+def generate_fasta_basename_suffix(recordNumber: int) -> str:
+      
+   digits = ""
+
+   if recordNumber < 1000:
+      if recordNumber >= 100:
+         digits = "0"
+      elif recordNumber >= 10: 
+         digits = "00"
+      else:
+         digits = "000"
+
+   return f"_seq{digits}{str(recordNumber)}"
+
+   
+#---------------------------------------------------------------------------------------------------
 # Use blastdbcmd to determine the BLAST database title.
 #---------------------------------------------------------------------------------------------------
 def get_database_title() -> str:
@@ -441,7 +499,7 @@ def main() -> None:
       create_json_file()
 
    except Exception as e:
-      sys.stderr.write(f"\nThe following error occurred: {str(e)}")
+      sys.stderr.write(f"\nThe following error occurred: {str(e)}\n")
       exit(1)
 
 
@@ -472,8 +530,7 @@ def process_fasta_file(sequence_file: SequenceFile):
    
    print(message)
 
-   # Look for the input file's data in json_results. If it hasn't been added yet,
-   # create a new input file data object.
+   # Look for the input file's data in json_results. If it hasn't been added yet, create a new input file data object.
    if input_filename in file_data_lookup:
       input_file_data = file_data_lookup[input_filename]
    else:
@@ -530,7 +587,7 @@ def process_fasta_file(sequence_file: SequenceFile):
 
       # initializing the sBaseAccession column in df that is used for joining
       df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\..*$', r'\1',regex=True)
-      print("\n", df["sBaseAccession"])
+      #print("\n", df["sBaseAccession"])
 
       # merging the two dataframes by the sBaseAccession column and the Accession column
       merge_dfs = pd.merge(df, parsed_data_df, left_on="sBaseAccession", right_on= "Accession", how="left")
@@ -703,7 +760,7 @@ def split_input_files() -> list[SequenceFile] | None:
       if sequences is None or len(sequences) < 1:
          continue
 
-      print(f"Found {len(sequences)} sequences in {input_file.name}\n")
+      print(f"Found {len(sequences)} sequence(s) in {input_file.name}\n")
 
       # Update the total sequence count.
       sequence_count += len(sequences)
@@ -747,7 +804,7 @@ def split_input_files() -> list[SequenceFile] | None:
             continue
 
          # Create a sequence file object for the split file.
-         sequence_file = SequenceFile(input_file.name, is_split, len(sequence.seq), f".{s}")
+         sequence_file = SequenceFile(input_file.name, is_split, len(sequence.seq), s)
 
          # Create a path for the sequence file.
          sequence_path = seq_files_path / sequence_file.get_filename()
@@ -759,7 +816,6 @@ def split_input_files() -> list[SequenceFile] | None:
          sequence_files.append(sequence_file)
 
    return sequence_files
-
 
 
 
@@ -778,7 +834,7 @@ if __name__ == "__main__" :
    parser.add_argument('-html',help="output html base filename",default="tax_results")
    parser.add_argument('-blastdb',help="input blast base filename",default="./blast/ICTV_VMR_b")
    parser.add_argument('-db', help="BLAST database file", default="blast/ICTV_VMR_b")
-   parser.add_argument('-decode', help="Decode the input filenames from base64URL encoding before serializing the search results", default="")
+   parser.add_argument('-decode', action='store_true', help="Decode the input filenames from base64URL encoding before serializing the search results")
    parser.add_argument('-info', action='store_true', help="Display BLAST database info")
 
    args = parser.parse_args()
@@ -795,7 +851,7 @@ if __name__ == "__main__" :
    settings = Settings(
       blastdb = args.blastdb,
       db = args.db,
-      decode_filenames = True if args.decode.strip().lower() == "true" else False,
+      decode_filenames = args.decode,
       html = args.html,
       indir = args.indir,
       json_filename = args.json,

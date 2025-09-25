@@ -77,6 +77,7 @@ COPY test_out/one_seq/ ./test_out/one_seq/
 
 # what does ENTRYPOINT do exactly?
 # ENTRYPOINT fixed the base command; immutable
-#ENTRYPOINT [ "./seqsearch" ]
+# dmd 09/16/25: changed to ENTRYPOINT from CMD to simplify passing arguments.
+ENTRYPOINT [ "./seqsearch" ]
 # CMD add default cmds/arguments
-CMD [ "./seqsearch" ]
+#CMD [ "./seqsearch" ]
