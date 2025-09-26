@@ -1,6 +1,6 @@
 {
     "database_name": "./blast/ICTV_VMR_b",
-    "database_title": "ICTV VMR_MSL40.v1.20250307 (b) \t27 sequences; 6,868,513 total bases  Date: Sep 26, 2025  11:24 AM\tLongest sequence: 4,857,450 bases",
+    "database_title": "ICTV VMR_MSL40.v1.20250307 (b) \t27 sequences; 6,868,513 total bases  Date: Sep 26, 2025  12:40 PM\tLongest sequence: 4,857,450 bases",
     "errors": "",
     "files": [
         {
@@ -8,8 +8,8 @@
             "name": "HM119428.fa",
             "sequences": [
                 {
-                    "blast_csv": "test_out/one_seq/HM119428.fa.csv",
-                    "blast_html": "test_out/one_seq/HM119428.fa.html",
+                    "blast_csv": "test_out/regression/HM119428.fa.csv",
+                    "blast_html": "test_out/regression/HM119428.fa.html",
                     "errors": [],
                     "hits": [
                         {
@@ -59,8 +59,8 @@
             "name": "Phlebovirus_candiruense-SNRV.fa",
             "sequences": [
                 {
-                    "blast_csv": "test_out/one_seq/Phlebovirus_candiruense-SNRV_seq0001.fa.csv",
-                    "blast_html": "test_out/one_seq/Phlebovirus_candiruense-SNRV_seq0001.fa.html",
+                    "blast_csv": "test_out/regression/Phlebovirus_candiruense-SNRV_seq0001.fa.csv",
+                    "blast_html": "test_out/regression/Phlebovirus_candiruense-SNRV_seq0001.fa.html",
                     "errors": [],
                     "hits": [
                         {
@@ -104,8 +104,8 @@
                     "status": "HITS"
                 },
                 {
-                    "blast_csv": "test_out/one_seq/Phlebovirus_candiruense-SNRV_seq0002.fa.csv",
-                    "blast_html": "test_out/one_seq/Phlebovirus_candiruense-SNRV_seq0002.fa.html",
+                    "blast_csv": "test_out/regression/Phlebovirus_candiruense-SNRV_seq0002.fa.csv",
+                    "blast_html": "test_out/regression/Phlebovirus_candiruense-SNRV_seq0002.fa.html",
                     "errors": [],
                     "hits": [
                         {
@@ -217,8 +217,8 @@
                     "status": "HITS"
                 },
                 {
-                    "blast_csv": "test_out/one_seq/Phlebovirus_candiruense-SNRV_seq0003.fa.csv",
-                    "blast_html": "test_out/one_seq/Phlebovirus_candiruense-SNRV_seq0003.fa.html",
+                    "blast_csv": "test_out/regression/Phlebovirus_candiruense-SNRV_seq0003.fa.csv",
+                    "blast_html": "test_out/regression/Phlebovirus_candiruense-SNRV_seq0003.fa.html",
                     "errors": [],
                     "hits": [
                         {
@@ -268,8 +268,8 @@
             "name": "KT732817.fa",
             "sequences": [
                 {
-                    "blast_csv": "test_out/one_seq/KT732817.fa.csv",
-                    "blast_html": "test_out/one_seq/KT732817.fa.html",
+                    "blast_csv": "test_out/regression/KT732817.fa.csv",
+                    "blast_html": "test_out/regression/KT732817.fa.html",
                     "errors": [],
                     "hits": [
                         {
@@ -428,8 +428,8 @@
             "name": "PP467602.fa",
             "sequences": [
                 {
-                    "blast_csv": "test_out/one_seq/PP467602.fa.csv",
-                    "blast_html": "test_out/one_seq/PP467602.fa.html",
+                    "blast_csv": "test_out/regression/PP467602.fa.csv",
+                    "blast_html": "test_out/regression/PP467602.fa.html",
                     "errors": [],
                     "hits": [
                         {
@@ -951,7 +951,7 @@
             ]
         }
     ],
-    "input_dir": "test_data/one_seq",
+    "input_dir": "test_data/regression",
     "program_name": "seqsearch",
-    "version": "VMR_MSL40.v1.20250307.1eaaee2"
+    "version": "VMR_MSL40.v1.20250307.8b05f0f"
 }
