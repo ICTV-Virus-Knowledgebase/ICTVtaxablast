@@ -2,7 +2,7 @@
 #
 # test run our docker image
 #
-TEST=one_seq
+TEST=regression
 if [[ ! -z "$1" && "$1" != -* ]]; then TEST="$1"; shift; fi
 echo TEST=$TEST
 TEST_DIR=./test_data/$TEST
