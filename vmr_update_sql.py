@@ -244,6 +244,14 @@ def parse_args() -> argparse.Namespace:
         help="Continue processing after encountering validation errors.",
     )
     parser.add_argument(
+        "--strict-accession",
+        action="store_true",
+        help=(
+            "Emit warnings for accession changes that only adjust whitespace, "
+            "segment labels, or populate previously empty values."
+        ),
+    )
+    parser.add_argument(
         "--updates-sql",
         default=UPDATES_FILENAME,
         help="Filename for UPDATE statements (default: %(default)s)",
@@ -522,20 +530,73 @@ def enforce_read_only(
                 )
 
 
-def parse_accession_tokens(value: object) -> List[str]:
+def split_accession_entries(value: object) -> List[Tuple[Optional[str], str]]:
+    """Return segment/accession pairs extracted from a worksheet cell."""
+
     text = normalize_string(value)
     if not text:
         return []
-    tokens: List[str] = []
+    entries: List[Tuple[Optional[str], str]] = []
     for fragment in re.split(r"[;\n]+", text):
         part = fragment.strip()
         if not part:
             continue
+        segment: Optional[str] = None
+        accession = part
         if ":" in part:
-            part = part.split(":", 1)[1].strip()
-        if part:
-            tokens.append(part.upper())
-    return tokens
+            segment_text, accession_text = part.split(":", 1)
+            segment = segment_text.strip() or None
+            accession = accession_text.strip()
+        if accession:
+            entries.append((segment, accession))
+    return entries
+
+
+def canonicalize_accession_entries(
+    entries: List[Tuple[Optional[str], str]], include_segment_names: bool
+) -> List[Tuple[str, str]]:
+    """Build a normalized representation of accession entries."""
+
+    canonical: List[Tuple[str, str]] = []
+    for segment, accession in entries:
+        accession_norm = accession.upper()
+        if include_segment_names:
+            segment_norm = (segment or "").upper()
+        else:
+            segment_norm = ""
+        canonical.append((segment_norm, accession_norm))
+    return canonical
+
+
+def classify_accession_change(original: object, updated: object) -> str:
+    """Classify how the accession field changed between two values."""
+
+    orig_entries = split_accession_entries(original)
+    upd_entries = split_accession_entries(updated)
+
+    if not orig_entries:
+        if not upd_entries:
+            return "whitespace"
+        if normalize_string(original) is None:
+            return "was_empty"
+    if not upd_entries:
+        if orig_entries:
+            return "meaningful"
+        return "whitespace"
+
+    if canonicalize_accession_entries(orig_entries, True) == canonicalize_accession_entries(
+        upd_entries, True
+    ):
+        return "whitespace"
+    if canonicalize_accession_entries(orig_entries, False) == canonicalize_accession_entries(
+        upd_entries, False
+    ):
+        return "segment_name"
+    return "meaningful"
+
+
+def parse_accession_tokens(value: object) -> List[str]:
+    return [accession.upper() for _, accession in split_accession_entries(value)]
 
 
 def check_new_record_accessions(
@@ -648,6 +709,8 @@ def build_update_entries(
     workbook_name: str,
     updated_sheet: str,
     errors: ErrorCollector,
+    *,
+    strict_accession: bool,
 ) -> List[UpdateEntry]:
     entries: List[UpdateEntry] = []
     updated_existing = updated_df[
@@ -669,17 +732,19 @@ def build_update_entries(
             if values_equal(orig_value, upd_value, vmr_column):
                 continue
             if vmr_column == "Virus GENBANK accession":
-                errors.add(
-                    workbook_name,
-                    updated_sheet,
-                    int(upd_row["__row_number"]),
-                    (
-                        "Virus GENBANK accession changed from "
-                        f"'{normalize_string(orig_value) or ''}' to "
-                        f"'{normalize_string(upd_value) or ''}' for isolate {isolate_id}."
-                    ),
-                    severity="WARNING",
-                )
+                change_type = classify_accession_change(orig_value, upd_value)
+                if strict_accession or change_type == "meaningful":
+                    errors.add(
+                        workbook_name,
+                        updated_sheet,
+                        int(upd_row["__row_number"]),
+                        (
+                            "Virus GENBANK accession changed from "
+                            f"'{normalize_string(orig_value) or ''}' to "
+                            f"'{normalize_string(upd_value) or ''}' for isolate {isolate_id}."
+                        ),
+                        severity="WARNING",
+                    )
             converted = convert_value(
                 sql_column,
                 upd_value,
@@ -887,7 +952,11 @@ def build_placeholder_sql_text(
 
 
 def process_workbook(
-    workbook_path: Path, workbook_name: str, errors: ErrorCollector
+    workbook_path: Path,
+    workbook_name: str,
+    errors: ErrorCollector,
+    *,
+    strict_accession: bool,
 ) -> ProcessResult:
     with pd.ExcelFile(workbook_path) as xl:
         sheet_names = xl.sheet_names
@@ -930,7 +999,14 @@ def process_workbook(
     check_new_record_accessions(updated_df, workbook_name, updated_sheet, errors)
 
     delete_entries = build_delete_entries(updated_df, workbook_name, updated_sheet, errors)
-    update_entries = build_update_entries(updated_df, original_df, workbook_name, updated_sheet, errors)
+    update_entries = build_update_entries(
+        updated_df,
+        original_df,
+        workbook_name,
+        updated_sheet,
+        errors,
+        strict_accession=strict_accession,
+    )
     insert_entries = build_insert_entries(updated_df, workbook_name, updated_sheet, errors)
 
     return ProcessResult(updated_sheet, delete_entries, update_entries, insert_entries)
@@ -998,7 +1074,12 @@ def main() -> None:
         )
     else:
         try:
-            result = process_workbook(workbook_path, workbook_path.name, errors)
+            result = process_workbook(
+                workbook_path,
+                workbook_path.name,
+                errors,
+                strict_accession=args.strict_accession,
+            )
         except ProcessingHalted:
             pass
         except Exception as exc:  # pragma: no cover - defensive programming
