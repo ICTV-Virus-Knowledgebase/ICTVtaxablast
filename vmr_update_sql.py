@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from numbers import Integral, Real
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 import pandas as pd
 
@@ -404,6 +404,80 @@ def prepare_dataframe(workbook: Path, sheet_name: str) -> pd.DataFrame:
     df["__row_number"] = (df.index + 2).astype(int)
     df["__isolate_id"] = df["Isolate ID"].apply(normalize_isolate_id)
     return df
+
+
+def read_column_value_constraints(
+    workbook: Path, workbook_name: str, errors: ErrorCollector
+) -> Dict[str, Set[str]]:
+    try:
+        column_values_df = pd.read_excel(workbook, sheet_name="Column Values", header=0)
+    except ValueError:
+        errors.add(
+            workbook_name,
+            "Column Values",
+            None,
+            "Workbook does not contain a 'Column Values' worksheet; column value validation skipped.",
+            severity="WARNING",
+        )
+        return {}
+
+    constraints: Dict[str, Set[str]] = {}
+    for raw_column in column_values_df.columns:
+        if pd.isna(raw_column):
+            continue
+        column_name = normalize_string(raw_column)
+        if column_name is None:
+            continue
+        allowed_values = {
+            value
+            for value in (
+                normalize_string(cell)
+                for cell in column_values_df[raw_column]
+                if not pd.isna(cell)
+            )
+            if value is not None
+        }
+        if allowed_values:
+            constraints[column_name] = allowed_values
+    return constraints
+
+
+def check_column_value_constraints(
+    updated_df: pd.DataFrame,
+    workbook_name: str,
+    updated_sheet: str,
+    errors: ErrorCollector,
+    constraints: Dict[str, Set[str]],
+) -> None:
+    if not constraints:
+        return
+    for column, allowed_values in constraints.items():
+        if column not in updated_df.columns:
+            continue
+        for _, row in updated_df.iterrows():
+            row_number = int(row["__row_number"])
+            cell_value = row[column]
+            if pd.isna(cell_value):
+                value_text = None
+            else:
+                value_text = normalize_string(cell_value)
+            if value_text is None:
+                errors.add(
+                    workbook_name,
+                    updated_sheet,
+                    row_number,
+                    f"Column '{column}' must not be blank; select a value from 'Column Values'.",
+                    severity="WARNING",
+                )
+                continue
+            if value_text not in allowed_values:
+                errors.add(
+                    workbook_name,
+                    updated_sheet,
+                    row_number,
+                    f"Column '{column}' contains '{value_text}' which is not listed in 'Column Values'.",
+                    severity="WARNING",
+                )
 
 
 def determine_updated_sheet(
@@ -972,6 +1046,18 @@ def process_workbook(
             )
         return ProcessResult(updated_sheet, [], [], [])
 
+    column_constraints: Dict[str, Set[str]] = {}
+    if "Column Values" in sheet_names:
+        column_constraints = read_column_value_constraints(workbook_path, workbook_name, errors)
+    else:
+        errors.add(
+            workbook_name,
+            "Column Values",
+            None,
+            "Workbook does not contain a 'Column Values' worksheet; column value validation skipped.",
+            severity="WARNING",
+        )
+
     updated_headers = pd.read_excel(workbook_path, sheet_name=updated_sheet, nrows=0).columns
     validate_headers(workbook_name, updated_sheet, list(updated_headers), errors)
 
@@ -982,6 +1068,13 @@ def process_workbook(
     updated_df["__abolished"] = updated_df["Species Sort"].apply(is_abolish_value)
     original_df = prepare_dataframe(workbook_path, "Original")
 
+    check_column_value_constraints(
+        updated_df,
+        workbook_name,
+        updated_sheet,
+        errors,
+        column_constraints,
+    )
     check_original_ids(original_df, workbook_name, errors)
     check_isolate_ids(updated_df, original_df, workbook_name, updated_sheet, errors)
     abolished_ids = {
