@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 import pandas as pd
+from openpyxl.styles import PatternFill
 
 DEFAULT_WORKBOOK = Path("./VMRs/VMR_MSL40.v1.20250307.editor_DBS_22 July.xlsx")
 ERROR_FILENAME = "errors.xlsx"
@@ -117,6 +118,23 @@ INSERT_COLUMN_MAPPING: Sequence[Tuple[str, str]] = (
 
 INT_COLUMNS = {"taxnode_id", "species_sort", "isolate_sort"}
 INVALID_VALUE = object()
+BLANK_CHECK_COLUMNS = REQUIRED_COLUMNS[:28]
+
+ERROR_CONTEXT_COLUMNS: Sequence[Tuple[str, str]] = (
+    ("Species Name", "Species"),
+    ("ICTV_ID", "ICTV_ID"),
+    ("Exemplar or additional isolate", "Exemplar or additional isolate"),
+    ("Virus name(s)", "Virus name(s)"),
+    ("Virus name abbreviation(s)", "Virus name abbreviation(s)"),
+    ("Virus isolate designation", "Virus isolate designation"),
+    ("Virus GENBANK accession", "Virus GENBANK accession"),
+)
+
+
+@dataclass
+class ColumnConstraint:
+    allowed_values: Set[str]
+    canonical_map: Dict[str, str]
 
 
 class ProcessingHalted(Exception):
@@ -171,6 +189,7 @@ class ErrorCollector:
         self.command = command
         self.version = version
         self.run_date = run_date
+        self.row_context: Dict[Tuple[str, int], Dict[str, Dict[str, object]]] = {}
 
     def add(
         self,
@@ -201,20 +220,100 @@ class ErrorCollector:
         )
         print(f"ERROR: {filename} - Unhandled exception: {exc!r}", file=sys.stderr)
 
+    def register_row_context(
+        self,
+        worksheet: str,
+        row_number: int,
+        values: Dict[str, object],
+        changes: Dict[str, bool],
+    ) -> None:
+        self.row_context[(worksheet, row_number)] = {"values": values, "changes": changes}
+
     def write_excel(self, output_path: Path) -> None:
-        data = {
-            "filename": [entry.filename for entry in self.entries],
-            "worksheet": [entry.worksheet for entry in self.entries],
-            "row": [entry.row for entry in self.entries],
-            "message": [entry.message for entry in self.entries],
-            "severity": [entry.severity for entry in self.entries],
-            "command": [self.command for _ in self.entries],
-            "version": [self.version for _ in self.entries],
-            "run_date": [self.run_date for _ in self.entries],
-        }
-        df = pd.DataFrame(data)
+        context_headers = [display for display, _ in ERROR_CONTEXT_COLUMNS]
+        rows: List[Dict[str, object]] = []
+        change_flags: List[Dict[str, bool]] = []
+        for entry in self.entries:
+            row_data: Dict[str, object] = {
+                "filename": entry.filename,
+                "worksheet": entry.worksheet,
+                "row": entry.row,
+                "message": entry.message,
+                "severity": entry.severity,
+                "command": self.command,
+                "version": self.version,
+                "run_date": self.run_date,
+            }
+            context = None
+            if entry.row is not None:
+                context = self.row_context.get((entry.worksheet, int(entry.row)))
+            context_changes: Dict[str, bool] = {}
+            for display in context_headers:
+                value = None
+                changed = False
+                if context:
+                    value = context["values"].get(display)
+                    changed = bool(context["changes"].get(display, False))
+                row_data[display] = value
+                context_changes[display] = changed
+            rows.append(row_data)
+            change_flags.append(context_changes)
+
+        columns = [
+            "filename",
+            "worksheet",
+            "row",
+            *context_headers,
+            "message",
+            "severity",
+            "command",
+            "version",
+            "run_date",
+        ]
+        df = pd.DataFrame(rows, columns=columns)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        df.to_excel(output_path, index=False)
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            sheet_name = "Sheet1"
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+            worksheet = writer.sheets[sheet_name]
+            start_row = 2
+            green_fill = PatternFill(fill_type="solid", start_color="C6EFCE", end_color="C6EFCE")
+            ictv_col_idx = columns.index("ICTV_ID") + 1 if "ICTV_ID" in columns else None
+            accession_col_idx = (
+                columns.index("Virus GENBANK accession") + 1
+                if "Virus GENBANK accession" in columns
+                else None
+            )
+            for row_offset, flags in enumerate(change_flags):
+                excel_row = start_row + row_offset
+                for display in context_headers:
+                    excel_col = columns.index(display) + 1
+                    if flags.get(display):
+                        worksheet.cell(row=excel_row, column=excel_col).fill = green_fill
+                if ictv_col_idx is not None:
+                    cell = worksheet.cell(row=excel_row, column=ictv_col_idx)
+                    value = cell.value
+                    if isinstance(value, str):
+                        stripped = value.strip()
+                        if re.fullmatch(r"VMR\d+", stripped):
+                            cell.hyperlink = f"https://ictv.global/id/{stripped}"
+                            cell.style = "Hyperlink"
+                if accession_col_idx is not None:
+                    cell = worksheet.cell(row=excel_row, column=accession_col_idx)
+                    value = cell.value
+                    if isinstance(value, str):
+                        entries = split_accession_entries(value)
+                        tokens = []
+                        for _, accession in entries:
+                            cleaned = accession.replace(" ", "")
+                            if cleaned:
+                                tokens.append(cleaned)
+                        if tokens:
+                            joined = ",".join(tokens)
+                            cell.hyperlink = (
+                                f"https://www.ncbi.nlm.nih.gov/nuccore/{joined}"
+                            )
+                            cell.style = "Hyperlink"
 
 
 def parse_args() -> argparse.Namespace:
@@ -297,6 +396,10 @@ def normalize_string(value: object) -> Optional[str]:
             return None
         return str(value)
     return str(value).strip() or None
+
+
+def canonicalize_column_value(value: str) -> str:
+    return "".join(ch for ch in value if ch.isalnum()).lower()
 
 
 def is_abolish_value(value: object) -> bool:
@@ -401,14 +504,113 @@ def validate_headers(
 def prepare_dataframe(workbook: Path, sheet_name: str) -> pd.DataFrame:
     df = pd.read_excel(workbook, sheet_name=sheet_name, usecols=REQUIRED_COLUMNS)
     df = df.copy()
+    blank_mask = (
+        df[BLANK_CHECK_COLUMNS]
+        .applymap(lambda value: normalize_string(value) is None)
+        .all(axis=1)
+    )
+    if blank_mask.any():
+        df = df.loc[~blank_mask].copy()
     df["__row_number"] = (df.index + 2).astype(int)
     df["__isolate_id"] = df["Isolate ID"].apply(normalize_isolate_id)
     return df
 
 
+def build_column_value_maps(df: pd.DataFrame) -> Dict[str, Dict[str, List[int]]]:
+    column_map: Dict[str, Dict[str, List[int]]] = {}
+    for raw_column in df.columns:
+        if pd.isna(raw_column):
+            continue
+        column_name = normalize_string(raw_column)
+        if column_name is None:
+            continue
+        values: Dict[str, List[int]] = {}
+        for idx, cell in df[raw_column].items():
+            text = normalize_string(cell)
+            if text is None:
+                continue
+            values.setdefault(text, []).append(excel_row(idx))
+        if values:
+            column_map[column_name] = values
+    return column_map
+
+
+def check_column_value_revisions(
+    workbook: Path,
+    workbook_name: str,
+    updated_df: pd.DataFrame,
+    errors: ErrorCollector,
+) -> None:
+    try:
+        original_df = pd.read_excel(
+            workbook, sheet_name="Original Column Values", header=0
+        )
+    except ValueError:
+        errors.add(
+            workbook_name,
+            "Original Column Values",
+            None,
+            "Workbook does not contain an 'Original Column Values' worksheet.",
+        )
+        return
+
+    updated_map = build_column_value_maps(updated_df)
+    original_map = build_column_value_maps(original_df)
+
+    for column, values in updated_map.items():
+        original_values = original_map.get(column, {})
+        if not original_values:
+            for value, rows in values.items():
+                errors.add(
+                    workbook_name,
+                    "Column Values",
+                    rows[0],
+                    (
+                        f"Value '{value}' in column '{column}' does not appear on 'Original "
+                        "Column Values'."
+                    ),
+                )
+            continue
+        for value, rows in values.items():
+            if value not in original_values:
+                errors.add(
+                    workbook_name,
+                    "Column Values",
+                    rows[0],
+                    (
+                        f"Value '{value}' in column '{column}' does not appear on 'Original "
+                        "Column Values'."
+                    ),
+                )
+
+    for column, values in original_map.items():
+        updated_values = updated_map.get(column, {})
+        if not updated_values:
+            for value, rows in values.items():
+                errors.add(
+                    workbook_name,
+                    "Original Column Values",
+                    rows[0],
+                    (
+                        f"Value '{value}' in column '{column}' is missing from 'Column Values'."
+                    ),
+                )
+            continue
+        for value, rows in values.items():
+            if value not in updated_values:
+                errors.add(
+                    workbook_name,
+                    "Original Column Values",
+                    rows[0],
+                    (
+                        f"Value '{value}' in column '{column}' is missing from 'Column Values'."
+                    ),
+                )
+
+
 def read_column_value_constraints(
     workbook: Path, workbook_name: str, errors: ErrorCollector
-) -> Dict[str, Set[str]]:
+) -> Dict[str, ColumnConstraint]:
     try:
         column_values_df = pd.read_excel(workbook, sheet_name="Column Values", header=0)
     except ValueError:
@@ -421,24 +623,29 @@ def read_column_value_constraints(
         )
         return {}
 
-    constraints: Dict[str, Set[str]] = {}
+    check_column_value_revisions(workbook, workbook_name, column_values_df, errors)
+
+    constraints: Dict[str, ColumnConstraint] = {}
     for raw_column in column_values_df.columns:
         if pd.isna(raw_column):
             continue
         column_name = normalize_string(raw_column)
         if column_name is None:
             continue
-        allowed_values = {
-            value
-            for value in (
-                normalize_string(cell)
-                for cell in column_values_df[raw_column]
-                if not pd.isna(cell)
-            )
-            if value is not None
-        }
+        allowed_values: Set[str] = set()
+        canonical_map: Dict[str, str] = {}
+        for cell in column_values_df[raw_column]:
+            if pd.isna(cell):
+                continue
+            value = normalize_string(cell)
+            if value is None:
+                continue
+            allowed_values.add(value)
+            canonical = canonicalize_column_value(value)
+            if canonical not in canonical_map:
+                canonical_map[canonical] = value
         if allowed_values:
-            constraints[column_name] = allowed_values
+            constraints[column_name] = ColumnConstraint(allowed_values, canonical_map)
     return constraints
 
 
@@ -447,14 +654,14 @@ def check_column_value_constraints(
     workbook_name: str,
     updated_sheet: str,
     errors: ErrorCollector,
-    constraints: Dict[str, Set[str]],
+    constraints: Dict[str, ColumnConstraint],
 ) -> None:
     if not constraints:
         return
-    for column, allowed_values in constraints.items():
+    for column, constraint in constraints.items():
         if column not in updated_df.columns:
             continue
-        for _, row in updated_df.iterrows():
+        for idx, row in updated_df.iterrows():
             row_number = int(row["__row_number"])
             cell_value = row[column]
             if pd.isna(cell_value):
@@ -470,14 +677,38 @@ def check_column_value_constraints(
                     severity="WARNING",
                 )
                 continue
-            if value_text not in allowed_values:
-                errors.add(
-                    workbook_name,
-                    updated_sheet,
-                    row_number,
-                    f"Column '{column}' contains '{value_text}' which is not listed in 'Column Values'.",
-                    severity="WARNING",
-                )
+            canonical = canonicalize_column_value(value_text)
+            corrected = constraint.canonical_map.get(canonical)
+            matches_allowed = value_text in constraint.allowed_values
+            if matches_allowed and corrected is not None:
+                if not (
+                    isinstance(row[column], str)
+                    and row[column] != corrected
+                    and corrected == value_text
+                ):
+                    continue
+            if corrected is not None:
+                if corrected != value_text or (
+                    isinstance(row[column], str) and row[column] != corrected
+                ):
+                    errors.add(
+                        workbook_name,
+                        updated_sheet,
+                        row_number,
+                        (
+                            f"Column '{column}' value '{value_text}' adjusted to "
+                            f"'{corrected}' to match 'Column Values'."
+                        ),
+                        severity="WARNING",
+                    )
+                updated_df.at[idx, column] = corrected
+                continue
+            errors.add(
+                workbook_name,
+                updated_sheet,
+                row_number,
+                f"Column '{column}' contains '{value_text}' which is not listed in 'Column Values'.",
+            )
 
 
 def determine_updated_sheet(
@@ -725,6 +956,50 @@ def check_new_record_accessions(
             continue
         for token in tokens:
             seen_new.setdefault(token, row_number)
+
+
+def register_error_context(
+    errors: ErrorCollector,
+    updated_df: pd.DataFrame,
+    original_df: pd.DataFrame,
+    updated_sheet: str,
+) -> None:
+    if updated_sheet is None:
+        return
+    original_map = (
+        original_df[original_df["__isolate_id"].notna()]
+        .set_index("__isolate_id")
+        if not original_df.empty
+        else pd.DataFrame()
+    )
+    for _, row in updated_df.iterrows():
+        row_number = int(row["__row_number"])
+        isolate_id = row["__isolate_id"]
+        orig_row: Optional[pd.Series]
+        orig_row = None
+        if isinstance(original_map, pd.DataFrame) and not original_map.empty and isolate_id:
+            try:
+                candidate = original_map.loc[isolate_id]
+            except KeyError:
+                candidate = None
+            if candidate is not None:
+                if isinstance(candidate, pd.DataFrame):
+                    if not candidate.empty:
+                        orig_row = candidate.iloc[0]
+                else:
+                    orig_row = candidate
+        context_values: Dict[str, object] = {}
+        context_changes: Dict[str, bool] = {}
+        for display, source_column in ERROR_CONTEXT_COLUMNS:
+            value = row[source_column]
+            context_values[display] = value
+            if orig_row is None:
+                context_changes[display] = normalize_string(value) is not None
+            else:
+                context_changes[display] = not values_equal(
+                    orig_row[source_column], value, source_column
+                )
+        errors.register_row_context(updated_sheet, row_number, context_values, context_changes)
 
 
 def convert_value(
@@ -1046,7 +1321,7 @@ def process_workbook(
             )
         return ProcessResult(updated_sheet, [], [], [])
 
-    column_constraints: Dict[str, Set[str]] = {}
+    column_constraints: Dict[str, ColumnConstraint] = {}
     if "Column Values" in sheet_names:
         column_constraints = read_column_value_constraints(workbook_path, workbook_name, errors)
     else:
@@ -1101,6 +1376,8 @@ def process_workbook(
         strict_accession=strict_accession,
     )
     insert_entries = build_insert_entries(updated_df, workbook_name, updated_sheet, errors)
+
+    register_error_context(errors, updated_df, original_df, updated_sheet)
 
     return ProcessResult(updated_sheet, delete_entries, update_entries, insert_entries)
 
