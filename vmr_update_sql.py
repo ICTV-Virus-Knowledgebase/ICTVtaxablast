@@ -6,19 +6,22 @@ from __future__ import annotations
 import argparse
 import math
 import re
+import shlex
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from numbers import Integral, Real
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 import pandas as pd
 
 DEFAULT_WORKBOOK = Path("./VMRs/VMR_MSL40.v1.20250307.editor_DBS_22 July.xlsx")
 ERROR_FILENAME = "errors.xlsx"
-UPDATES_FILENAME = "vmr_1_updates.sql"
-INSERTS_FILENAME = "vmr_2_inserts.sql"
+DELETES_FILENAME = "vmr_1_deletes.sql"
+UPDATES_FILENAME = "vmr_2_updates.sql"
+INSERTS_FILENAME = "vmr_3_inserts.sql"
 VERSION_FILE = Path("version_git.txt")
 
 # Columns A:AG that must appear (in order) on the worksheets we process.
@@ -126,6 +129,7 @@ class ErrorEntry:
     worksheet: str
     row: Optional[int]
     message: str
+    severity: str
 
 
 @dataclass
@@ -143,8 +147,17 @@ class InsertEntry:
 
 
 @dataclass
+class DeleteEntry:
+    isolate_id: str
+    target_value: str
+    row_number: int
+    details: List[Tuple[str, Optional[object]]]
+
+
+@dataclass
 class ProcessResult:
     updated_sheet: Optional[str]
+    delete_entries: List[DeleteEntry]
     update_entries: List[UpdateEntry]
     insert_entries: List[InsertEntry]
 
@@ -152,27 +165,40 @@ class ProcessResult:
 class ErrorCollector:
     """Collects errors and enforces the stop/continue policy."""
 
-    def __init__(self, keep_going: bool) -> None:
+    def __init__(self, keep_going: bool, command: str, version: str, run_date: str) -> None:
         self.keep_going = keep_going
         self.entries: List[ErrorEntry] = []
+        self.command = command
+        self.version = version
+        self.run_date = run_date
 
-    def add(self, filename: str, worksheet: str, row: Optional[int], message: str) -> None:
-        entry = ErrorEntry(filename, worksheet, row, message)
+    def add(
+        self,
+        filename: str,
+        worksheet: str,
+        row: Optional[int],
+        message: str,
+        *,
+        severity: str = "ERROR",
+    ) -> None:
+        entry = ErrorEntry(filename, worksheet, row, message, severity)
         self.entries.append(entry)
         location = filename
         if worksheet:
             location += f"::{worksheet}"
         if row is not None:
             location += f" row {row}"
-        print(f"ERROR: {location} - {message}", file=sys.stderr)
-        if not self.keep_going:
+        print(f"{severity.upper()}: {location} - {message}", file=sys.stderr)
+        if severity.upper() == "ERROR" and not self.keep_going:
             raise ProcessingHalted(message)
 
     def has_errors(self) -> bool:
-        return bool(self.entries)
+        return any(entry.severity.upper() == "ERROR" for entry in self.entries)
 
     def extend_with_exception(self, filename: str, exc: Exception) -> None:
-        self.entries.append(ErrorEntry(filename, "", None, f"Unhandled exception: {exc!r}"))
+        self.entries.append(
+            ErrorEntry(filename, "", None, f"Unhandled exception: {exc!r}", "ERROR")
+        )
         print(f"ERROR: {filename} - Unhandled exception: {exc!r}", file=sys.stderr)
 
     def write_excel(self, output_path: Path) -> None:
@@ -181,6 +207,10 @@ class ErrorCollector:
             "worksheet": [entry.worksheet for entry in self.entries],
             "row": [entry.row for entry in self.entries],
             "message": [entry.message for entry in self.entries],
+            "severity": [entry.severity for entry in self.entries],
+            "command": [self.command for _ in self.entries],
+            "version": [self.version for _ in self.entries],
+            "run_date": [self.run_date for _ in self.entries],
         }
         df = pd.DataFrame(data)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -214,9 +244,22 @@ def parse_args() -> argparse.Namespace:
         help="Continue processing after encountering validation errors.",
     )
     parser.add_argument(
+        "--strict-accession",
+        action="store_true",
+        help=(
+            "Emit warnings for accession changes that only adjust whitespace, "
+            "segment labels, or populate previously empty values."
+        ),
+    )
+    parser.add_argument(
         "--updates-sql",
         default=UPDATES_FILENAME,
         help="Filename for UPDATE statements (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--deletes-sql",
+        default=DELETES_FILENAME,
+        help="Filename for DELETE statements (default: %(default)s)",
     )
     parser.add_argument(
         "--inserts-sql",
@@ -254,6 +297,11 @@ def normalize_string(value: object) -> Optional[str]:
             return None
         return str(value)
     return str(value).strip() or None
+
+
+def is_abolish_value(value: object) -> bool:
+    text = normalize_string(value)
+    return text is not None and text.lower() == "abolish"
 
 
 def normalize_int_like(value: object) -> Optional[int]:
@@ -358,6 +406,80 @@ def prepare_dataframe(workbook: Path, sheet_name: str) -> pd.DataFrame:
     return df
 
 
+def read_column_value_constraints(
+    workbook: Path, workbook_name: str, errors: ErrorCollector
+) -> Dict[str, Set[str]]:
+    try:
+        column_values_df = pd.read_excel(workbook, sheet_name="Column Values", header=0)
+    except ValueError:
+        errors.add(
+            workbook_name,
+            "Column Values",
+            None,
+            "Workbook does not contain a 'Column Values' worksheet; column value validation skipped.",
+            severity="WARNING",
+        )
+        return {}
+
+    constraints: Dict[str, Set[str]] = {}
+    for raw_column in column_values_df.columns:
+        if pd.isna(raw_column):
+            continue
+        column_name = normalize_string(raw_column)
+        if column_name is None:
+            continue
+        allowed_values = {
+            value
+            for value in (
+                normalize_string(cell)
+                for cell in column_values_df[raw_column]
+                if not pd.isna(cell)
+            )
+            if value is not None
+        }
+        if allowed_values:
+            constraints[column_name] = allowed_values
+    return constraints
+
+
+def check_column_value_constraints(
+    updated_df: pd.DataFrame,
+    workbook_name: str,
+    updated_sheet: str,
+    errors: ErrorCollector,
+    constraints: Dict[str, Set[str]],
+) -> None:
+    if not constraints:
+        return
+    for column, allowed_values in constraints.items():
+        if column not in updated_df.columns:
+            continue
+        for _, row in updated_df.iterrows():
+            row_number = int(row["__row_number"])
+            cell_value = row[column]
+            if pd.isna(cell_value):
+                value_text = None
+            else:
+                value_text = normalize_string(cell_value)
+            if value_text is None:
+                errors.add(
+                    workbook_name,
+                    updated_sheet,
+                    row_number,
+                    f"Column '{column}' must not be blank; select a value from 'Column Values'.",
+                    severity="WARNING",
+                )
+                continue
+            if value_text not in allowed_values:
+                errors.add(
+                    workbook_name,
+                    updated_sheet,
+                    row_number,
+                    f"Column '{column}' contains '{value_text}' which is not listed in 'Column Values'.",
+                    severity="WARNING",
+                )
+
+
 def determine_updated_sheet(
     sheet_names: Sequence[str], workbook_name: str, errors: ErrorCollector
 ) -> Optional[str]:
@@ -458,6 +580,7 @@ def enforce_read_only(
     workbook_name: str,
     updated_sheet: str,
     errors: ErrorCollector,
+    abolished_ids: set[str],
 ) -> None:
     updated_map = updated_df.set_index("__isolate_id")
     original_map = original_df.set_index("__isolate_id")
@@ -466,6 +589,8 @@ def enforce_read_only(
             continue
         upd_row = updated_map.loc[isolate_id]
         if isinstance(upd_row, pd.DataFrame):
+            continue
+        if isolate_id in abolished_ids:
             continue
         for column in READ_ONLY_COLUMNS:
             if column == "Isolate ID":
@@ -479,35 +604,92 @@ def enforce_read_only(
                 )
 
 
-def parse_accession_tokens(value: object) -> List[str]:
+def split_accession_entries(value: object) -> List[Tuple[Optional[str], str]]:
+    """Return segment/accession pairs extracted from a worksheet cell."""
+
     text = normalize_string(value)
     if not text:
         return []
-    tokens: List[str] = []
+    entries: List[Tuple[Optional[str], str]] = []
     for fragment in re.split(r"[;\n]+", text):
         part = fragment.strip()
         if not part:
             continue
+        segment: Optional[str] = None
+        accession = part
         if ":" in part:
-            part = part.split(":", 1)[1].strip()
-        if part:
-            tokens.append(part.upper())
-    return tokens
+            segment_text, accession_text = part.split(":", 1)
+            segment = segment_text.strip() or None
+            accession = accession_text.strip()
+        if accession:
+            entries.append((segment, accession))
+    return entries
+
+
+def canonicalize_accession_entries(
+    entries: List[Tuple[Optional[str], str]], include_segment_names: bool
+) -> List[Tuple[str, str]]:
+    """Build a normalized representation of accession entries."""
+
+    canonical: List[Tuple[str, str]] = []
+    for segment, accession in entries:
+        accession_norm = accession.upper()
+        if include_segment_names:
+            segment_norm = (segment or "").upper()
+        else:
+            segment_norm = ""
+        canonical.append((segment_norm, accession_norm))
+    return canonical
+
+
+def classify_accession_change(original: object, updated: object) -> str:
+    """Classify how the accession field changed between two values."""
+
+    orig_entries = split_accession_entries(original)
+    upd_entries = split_accession_entries(updated)
+
+    if not orig_entries:
+        if not upd_entries:
+            return "whitespace"
+        if normalize_string(original) is None:
+            return "was_empty"
+    if not upd_entries:
+        if orig_entries:
+            return "meaningful"
+        return "whitespace"
+
+    if canonicalize_accession_entries(orig_entries, True) == canonicalize_accession_entries(
+        upd_entries, True
+    ):
+        return "whitespace"
+    if canonicalize_accession_entries(orig_entries, False) == canonicalize_accession_entries(
+        upd_entries, False
+    ):
+        return "segment_name"
+    return "meaningful"
+
+
+def parse_accession_tokens(value: object) -> List[str]:
+    return [accession.upper() for _, accession in split_accession_entries(value)]
 
 
 def check_new_record_accessions(
     updated_df: pd.DataFrame,
-    original_df: pd.DataFrame,
     workbook_name: str,
     updated_sheet: str,
     errors: ErrorCollector,
 ) -> None:
-    new_rows = updated_df[updated_df["__isolate_id"].isna()]
+    new_rows = updated_df[
+        (updated_df["__isolate_id"].isna()) & (~updated_df["__abolished"])
+    ]
     if new_rows.empty:
         return
 
     existing_map: dict[str, int] = {}
-    for _, row in original_df.iterrows():
+    existing_rows = updated_df[
+        (updated_df["__isolate_id"].notna()) & (~updated_df["__abolished"])
+    ]
+    for _, row in existing_rows.iterrows():
         row_number = int(row["__row_number"])
         for token in parse_accession_tokens(row["Virus GENBANK accession"]):
             existing_map.setdefault(token, row_number)
@@ -519,7 +701,7 @@ def check_new_record_accessions(
         duplicates = sorted({token for token in tokens if token in existing_map})
         if duplicates:
             refs = [
-                f"{token} (Original row {existing_map[token]})" for token in duplicates
+                f"{token} (worksheet row {existing_map[token]})" for token in duplicates
             ]
             errors.add(
                 workbook_name,
@@ -527,16 +709,22 @@ def check_new_record_accessions(
                 row_number,
                 "New record reuses existing accession(s): " + ", ".join(refs),
             )
+            continue
+        duplicates_new = sorted({token for token in tokens if token in seen_new})
+        if duplicates_new:
+            refs = [
+                f"{token} (worksheet row {seen_new[token]})" for token in duplicates_new
+            ]
+            errors.add(
+                workbook_name,
+                updated_sheet,
+                row_number,
+                "New record reuses accession(s) from other new rows: "
+                + ", ".join(refs),
+            )
+            continue
         for token in tokens:
-            if token in seen_new and seen_new[token] != row_number:
-                errors.add(
-                    workbook_name,
-                    updated_sheet,
-                    row_number,
-                    f"Accession {token} already used by new row {seen_new[token]}",
-                )
-            else:
-                seen_new[token] = row_number
+            seen_new.setdefault(token, row_number)
 
 
 def convert_value(
@@ -595,9 +783,13 @@ def build_update_entries(
     workbook_name: str,
     updated_sheet: str,
     errors: ErrorCollector,
+    *,
+    strict_accession: bool,
 ) -> List[UpdateEntry]:
     entries: List[UpdateEntry] = []
-    updated_existing = updated_df[updated_df["__isolate_id"].notna()].set_index("__isolate_id")
+    updated_existing = updated_df[
+        (updated_df["__isolate_id"].notna()) & (~updated_df["__abolished"])
+    ].set_index("__isolate_id")
     original_existing = original_df[original_df["__isolate_id"].notna()].set_index("__isolate_id")
 
     for isolate_id, orig_row in original_existing.iterrows():
@@ -613,6 +805,20 @@ def build_update_entries(
             upd_value = upd_row[vmr_column]
             if values_equal(orig_value, upd_value, vmr_column):
                 continue
+            if vmr_column == "Virus GENBANK accession":
+                change_type = classify_accession_change(orig_value, upd_value)
+                if strict_accession or change_type == "meaningful":
+                    errors.add(
+                        workbook_name,
+                        updated_sheet,
+                        int(upd_row["__row_number"]),
+                        (
+                            "Virus GENBANK accession changed from "
+                            f"'{normalize_string(orig_value) or ''}' to "
+                            f"'{normalize_string(upd_value) or ''}' for isolate {isolate_id}."
+                        ),
+                        severity="WARNING",
+                    )
             converted = convert_value(
                 sql_column,
                 upd_value,
@@ -655,7 +861,9 @@ def build_insert_entries(
     errors: ErrorCollector,
 ) -> List[InsertEntry]:
     entries: List[InsertEntry] = []
-    new_rows = updated_df[updated_df["__isolate_id"].isna()]
+    new_rows = updated_df[
+        (updated_df["__isolate_id"].isna()) & (~updated_df["__abolished"])
+    ]
     for _, row in new_rows.iterrows():
         row_number = int(row["__row_number"])
         values: List[Tuple[str, Optional[object]]] = []
@@ -676,6 +884,50 @@ def build_insert_entries(
         if invalid:
             continue
         entries.append(InsertEntry(row_number=row_number, values=values))
+    return entries
+
+
+def build_delete_entries(
+    updated_df: pd.DataFrame,
+    workbook_name: str,
+    updated_sheet: str,
+    errors: ErrorCollector,
+) -> List[DeleteEntry]:
+    entries: List[DeleteEntry] = []
+    delete_rows = updated_df[updated_df["__abolished"]]
+    for _, row in delete_rows.iterrows():
+        row_number = int(row["__row_number"])
+        isolate_id = normalize_isolate_id(row["Isolate ID"])
+        if not isolate_id:
+            errors.add(
+                workbook_name,
+                updated_sheet,
+                row_number,
+                "Row marked for abolish must contain an Isolate ID.",
+            )
+            continue
+        target_value = normalize_string(row["Isolate ID"])
+        if not target_value:
+            errors.add(
+                workbook_name,
+                updated_sheet,
+                row_number,
+                "Row marked for abolish must contain an Isolate ID value.",
+            )
+            continue
+        details: List[Tuple[str, Optional[object]]] = []
+        for column in REQUIRED_COLUMNS:
+            if column == "Species Sort":
+                continue
+            details.append((column, row[column]))
+        entries.append(
+            DeleteEntry(
+                isolate_id=isolate_id,
+                target_value=target_value,
+                row_number=row_number,
+                details=details,
+            )
+        )
     return entries
 
 
@@ -741,6 +993,30 @@ def build_insert_sql_text(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def build_delete_sql_text(
+    entries: List[DeleteEntry], workbook_path: Path, version: str
+) -> str:
+    lines = generate_sql_header(workbook_path, version)
+    if not entries:
+        lines.append("-- No deletes required.")
+        return "\n".join(lines) + "\n"
+    for entry in entries:
+        lines.append(f"-- {entry.isolate_id} (worksheet row {entry.row_number})")
+        for column, value in entry.details:
+            comment_value = normalize_string(value)
+            if comment_value is None:
+                comment_value = ""
+            else:
+                comment_value = comment_value.replace("\n", " | ")
+            lines.append(f"-- {column}: {comment_value}")
+        lines.append("DELETE FROM species_isolates")
+        lines.append(
+            f"WHERE isolate_id = {format_sql_value('isolate_id', entry.target_value)};"
+        )
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def build_placeholder_sql_text(
     workbook_path: Path, version: str, note: str
 ) -> str:
@@ -750,7 +1026,11 @@ def build_placeholder_sql_text(
 
 
 def process_workbook(
-    workbook_path: Path, workbook_name: str, errors: ErrorCollector
+    workbook_path: Path,
+    workbook_name: str,
+    errors: ErrorCollector,
+    *,
+    strict_accession: bool,
 ) -> ProcessResult:
     with pd.ExcelFile(workbook_path) as xl:
         sheet_names = xl.sheet_names
@@ -764,7 +1044,19 @@ def process_workbook(
                 None,
                 "Workbook does not contain an 'Original' worksheet.",
             )
-        return ProcessResult(updated_sheet, [], [])
+        return ProcessResult(updated_sheet, [], [], [])
+
+    column_constraints: Dict[str, Set[str]] = {}
+    if "Column Values" in sheet_names:
+        column_constraints = read_column_value_constraints(workbook_path, workbook_name, errors)
+    else:
+        errors.add(
+            workbook_name,
+            "Column Values",
+            None,
+            "Workbook does not contain a 'Column Values' worksheet; column value validation skipped.",
+            severity="WARNING",
+        )
 
     updated_headers = pd.read_excel(workbook_path, sheet_name=updated_sheet, nrows=0).columns
     validate_headers(workbook_name, updated_sheet, list(updated_headers), errors)
@@ -773,17 +1065,44 @@ def process_workbook(
     validate_headers(workbook_name, "Original", list(original_headers), errors)
 
     updated_df = prepare_dataframe(workbook_path, updated_sheet)
+    updated_df["__abolished"] = updated_df["Species Sort"].apply(is_abolish_value)
     original_df = prepare_dataframe(workbook_path, "Original")
 
+    check_column_value_constraints(
+        updated_df,
+        workbook_name,
+        updated_sheet,
+        errors,
+        column_constraints,
+    )
     check_original_ids(original_df, workbook_name, errors)
     check_isolate_ids(updated_df, original_df, workbook_name, updated_sheet, errors)
-    enforce_read_only(updated_df, original_df, workbook_name, updated_sheet, errors)
-    check_new_record_accessions(updated_df, original_df, workbook_name, updated_sheet, errors)
+    abolished_ids = {
+        isolate_id
+        for isolate_id in updated_df.loc[updated_df["__abolished"], "__isolate_id"].dropna()
+    }
+    enforce_read_only(
+        updated_df,
+        original_df,
+        workbook_name,
+        updated_sheet,
+        errors,
+        abolished_ids,
+    )
+    check_new_record_accessions(updated_df, workbook_name, updated_sheet, errors)
 
-    update_entries = build_update_entries(updated_df, original_df, workbook_name, updated_sheet, errors)
+    delete_entries = build_delete_entries(updated_df, workbook_name, updated_sheet, errors)
+    update_entries = build_update_entries(
+        updated_df,
+        original_df,
+        workbook_name,
+        updated_sheet,
+        errors,
+        strict_accession=strict_accession,
+    )
     insert_entries = build_insert_entries(updated_df, workbook_name, updated_sheet, errors)
 
-    return ProcessResult(updated_sheet, update_entries, insert_entries)
+    return ProcessResult(updated_sheet, delete_entries, update_entries, insert_entries)
 
 
 def write_sql_outputs(
@@ -795,6 +1114,7 @@ def write_sql_outputs(
     had_errors: bool,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
+    deletes_path = output_dir / args.deletes_sql
     updates_path = output_dir / args.updates_sql
     inserts_path = output_dir / args.inserts_sql
     workbook_display = workbook_path.resolve()
@@ -802,12 +1122,15 @@ def write_sql_outputs(
     if had_errors or result.updated_sheet is None:
         note = "Errors encountered; SQL generation skipped."
         placeholder = build_placeholder_sql_text(workbook_display, version, note)
+        deletes_path.write_text(placeholder, encoding="utf-8")
         updates_path.write_text(placeholder, encoding="utf-8")
         inserts_path.write_text(placeholder, encoding="utf-8")
         return
 
+    deletes_sql = build_delete_sql_text(result.delete_entries, workbook_display, version)
     updates_sql = build_update_sql_text(result.update_entries, workbook_display, version)
     inserts_sql = build_insert_sql_text(result.insert_entries, workbook_display, version)
+    deletes_path.write_text(deletes_sql, encoding="utf-8")
     updates_path.write_text(updates_sql, encoding="utf-8")
     inserts_path.write_text(inserts_sql, encoding="utf-8")
 
@@ -820,9 +1143,20 @@ def main() -> None:
     else:
         output_dir = Path(Path(args.workbook).name).with_suffix("")
 
-    errors = ErrorCollector(keep_going=args.keep_going)
+    command_line = " ".join(shlex.quote(arg) for arg in sys.argv)
+    run_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        subprocess.run(["./version_git.sh"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except FileNotFoundError:
+        pass
     version = read_version()
-    result = ProcessResult(None, [], [])
+    errors = ErrorCollector(
+        keep_going=args.keep_going,
+        command=command_line,
+        version=version,
+        run_date=run_timestamp,
+    )
+    result = ProcessResult(None, [], [], [])
 
     if not workbook_path.exists():
         errors.add(
@@ -833,7 +1167,12 @@ def main() -> None:
         )
     else:
         try:
-            result = process_workbook(workbook_path, workbook_path.name, errors)
+            result = process_workbook(
+                workbook_path,
+                workbook_path.name,
+                errors,
+                strict_accession=args.strict_accession,
+            )
         except ProcessingHalted:
             pass
         except Exception as exc:  # pragma: no cover - defensive programming
