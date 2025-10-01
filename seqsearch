@@ -711,9 +711,12 @@ def run_blast(filename: str):
       df.to_csv(blastcsv_output_filepath, index=False)
 
    except subprocess.CalledProcessError as e:
-      raise RuntimeError(f"Runtime error from blast_formatter (CSV) command:\n{e.stderr}")
+      sys.stderr.write(f"Process error from blast_formatter (CSV) command:\n{e.stderr}")
+      return
+
    except Exception as ex:
-      raise RuntimeError(f"Error running blast_formatter (CSV) command:\n{str(ex)}")
+      sys.stderr.write(f"Error running blast_formatter (CSV) command:\n{str(ex)}")
+      return
    
    # Generate the HTML output file.
    try:
@@ -723,9 +726,11 @@ def run_blast(filename: str):
       subprocess.run(blasthtml_cmd, capture_output=True, text=True, check=True)
 
    except subprocess.CalledProcessError as e:
-      raise RuntimeError(f"Runtime error from blast_formatter (HTML) command:\n{e.stderr}\n")
+      sys.stderr.write(f"Runtime error from blast_formatter (HTML) command:\n{e.stderr}\n")
+      return
    except Exception as ex:
-      raise RuntimeError(f"Error running blast_formatter (HTML) command:\n{str(ex)}")
+      sys.stderr.write(f"Error running blast_formatter (HTML) command:\n{str(ex)}")
+      return
    
 
 #---------------------------------------------------------------------------------------------------
