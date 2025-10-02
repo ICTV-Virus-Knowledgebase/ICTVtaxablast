@@ -374,7 +374,9 @@ def fetch_fasta(processed_accession_file_name):
             genus_name   = row.iloc[24]
             species_name = row.iloc[26]
             virus_names  = row.iloc[27]
-            if args.verbose: print("Fetch [",count,"] ID:",Isolate_ID," Species:",species_name," Segment:",segment," Accession:",accession_ID)
+            if args.verbose:
+                count+=1
+                print("Fetch [",count,"] ID:",Isolate_ID," Species:",species_name," Segment:",segment," Accession:",accession_ID)
 
             # emtpy cell becomes float:NaN!
             if segment != segment:         segment = ""
@@ -385,20 +387,16 @@ def fetch_fasta(processed_accession_file_name):
             genus_dir = args.fasta_dir+"/"+str(genus_name)
             if genus_name == "":
                 genus_dir = args.fasta_dir+"/"+"no_genus"
-            accession_nt_raw_file_name = genus_dir+"/"+str(accession_ID)+".nt"+".raw"
-            accession_nt_fa_file_name = genus_dir+"/"+str(accession_ID)+".nt"+".fa"
-            accession_aa_raw_file_name = genus_dir+"/"+str(accession_ID)+".aa"+".raw"
-            accession_aa_fa_file_name = genus_dir+"/"+str(accession_ID)+".aa"+".fa"
+            accession_gb = genus_dir+"/"+str(accession_ID)+".gb"
+            # accession_aa_fasta = genus_dir+"/"+str(accession_ID)+".faa."
+            # accession_nt_fasta = genus_dir+"/"+str(accession_ID)+".fna"
+            
 
             
             # Assign the computed values to the new columns
-            Accessions.loc[count, "accession_nt_raw_file_name"] = accession_nt_raw_file_name
-            Accessions.loc[count, "accession_nt_fa_file_name"] = accession_nt_fa_file_name
-            Accessions.loc[count, "accession_aa_raw_file_aa_name"] = accession_aa_raw_file_name
-            Accessions.loc[count, "accession_aa_fa_file_aa_name"] = accession_aa_fa_file_name
-
-            raw_file_list = [accession_nt_raw_file_name,accession_aa_raw_file_name]
-            fa_file_list = [accession_nt_fa_file_name,accession_aa_fa_file_name]
+            Accessions.loc[count, "accession_gb"] = accession_gb
+            
+            
     
             # make sure dir exists
             if not os.path.exists(genus_dir):
@@ -407,15 +405,19 @@ def fetch_fasta(processed_accession_file_name):
                 if args.verbose: print(f"Directory '{genus_dir}' created successfully.")
     
             # check if the raw file exists
-            for files in raw_file_list:
-                if os.path.exists(files):
-                    if args.verbose: print("[FETCH]  SKIP NCBI fetch for {files}".format(**locals()))
+            if os.path.exists(accession_gb):
+                if args.verbose: print("[FETCH]  SKIP NCBI fetch for {accession_gb}".format(**locals()))
             else:
-                raw_file = open(files,'w')
-                if args.verbose: print("[FETCH]  EXEC NCBI fetch for {files}".format(**locals()))
+                raw_file = open(accession_gb,'w')
+                
+                if args.verbose: print("[FETCH]  EXEC NCBI fetch for {accession_gb}".format(**locals()))
                 try:
                     # fetch FASTA from NCBI
-                    handle = Entrez.efetch(db="nuccore", id=accession_ID, rettype="fasta", retmode="text")
+                    
+                    handle = Entrez.efetch(db="nuccore", id=accession_ID, rettype="gb", retmode="text")
+
+                    
+                    
 
                     # limit requests: 3/second with email, 10/second with API_KEY
                     time.sleep(entrez_sleep)
@@ -427,72 +429,72 @@ def fetch_fasta(processed_accession_file_name):
                     raw_fa = handle.read()
                     raw_file.write(raw_fa);
                     raw_file.close()
-                    if args.verbose: print('    wrote: '+files)
+                    if args.verbose: print('    wrote: '+accession_gb)
 
                 except:
                     print("    [ERR] Accession ID "+"'"+str(accession_ID)+"'"+" Entrez.efetch threw an error",file=sys.stderr)
                     bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
 
             # check if processed fasta is out of date
-            for files in fa_file_list:
-                if os.path.getsize(raw_file) == 0:
-                    if args.verbose: print("[FORMAT] SKIP/ERROR raw files is empty for {files}".format(**locals()))
-                elif os.path.exists(files) and os.path.getmtime(files) > os.path.getmtime(raw_file):
-                    if args.verbose: print("[FORMAT] SKIP reformat header for {files}".format(**locals()))
-            else:
-                if args.verbose: print("[FORMAT] EXEC reformat header for {files}".format(**locals()))
+            
+    #         if os.path.getsize(accession_gb) == 0:
+    #                 if args.verbose: print("[FORMAT] SKIP/ERROR raw files is empty for {files}".format(**locals()))
+    #             elif os.path.exists(files) and os.path.getmtime(files) > os.path.getmtime(nt_raw_file):
+    #                 if args.verbose: print("[FORMAT] SKIP reformat header for {files}".format(**locals()))
+    #         else:
+    #             if args.verbose: print("[FORMAT] EXEC reformat header for {files}".format(**locals()))
                 
-                # open local raw genbank fasta
-                raw_file = open(raw_file,'r')
-                raw_fa = raw_file.read()
-                raw_file.close()
+    #             # open local raw genbank fasta
+    #             nt_raw_file = open(nt_raw_file,'r')
+    #             raw_fa = nt_raw_file.read()
+    #             nt_raw_file.close()
 
-                # open local (header modified) version
-                fa_file  = open(files,'w')
+    #             # open local (header modified) version
+    #             fa_file  = open(files,'w')
 
-                # parse out header and seq
-                fa_desc = raw_fa.split("\n")[0].replace(">","")
-                ncbi_accession = fa_desc.split(" ",1)[0]
-                fa_seq =    raw_fa.split("\n",1)[1]
+    #             # parse out header and seq
+    #             fa_desc = raw_fa.split("\n")[0].replace(">","")
+    #             ncbi_accession = fa_desc.split(" ",1)[0]
+    #             fa_seq =    raw_fa.split("\n",1)[1]
 
-                # build ICTV-modified header
-                #  ACCESSION#VMR_SPECIES[#VMR_SEG] FAMILY TYPE VMR_ID ISOLATE_NAME 
+    #             # build ICTV-modified header
+    #             #  ACCESSION#VMR_SPECIES[#VMR_SEG] FAMILY TYPE VMR_ID ISOLATE_NAME 
 
-                #field_sep="#"
-                field_sep="-"
-                # remove spaces and field separators
-                species_name_cleaned = str(  species_name).replace(" ","_").replace("-","_")
-                segment_cleaned =      str(       segment).replace(" ","_").replace("-","_")
-                accession_cleaned =    str(ncbi_accession)
-                if str(segment).lower() == "":
-                    # leave out #SEG
-                    #desc_line = '>'+field_sep.join([str(ncbi_accession),str(species_name.replace(" ","_"))])
-                    desc_line = '>'+field_sep.join([species_name_cleaned,"",accession_cleaned])
-                else:
-                    # include #SEG
-                    #desc_line = '>'+'#'.join([str(ncbi_accession),str(species_name.replace(" ","_")),str(segment)])
-                    desc_line = '>'+field_sep.join([species_name_cleaned,segment_cleaned,accession_cleaned])
-                # add comments to fasta header
-                #desc_line = ' '.join([desc_line,family_name,Isolate_type,Isolate_ID,virus_names])
-                desc_line = ' '.join([desc_line,family_name,Isolate_type,virus_names])
+    #             #field_sep="#"
+    #             field_sep="-"
+    #             # remove spaces and field separators
+    #             species_name_cleaned = str(  species_name).replace(" ","_").replace("-","_")
+    #             segment_cleaned =      str(       segment).replace(" ","_").replace("-","_")
+    #             accession_cleaned =    str(ncbi_accession)
+    #             if str(segment).lower() == "":
+    #                 # leave out #SEG
+    #                 #desc_line = '>'+field_sep.join([str(ncbi_accession),str(species_name.replace(" ","_"))])
+    #                 desc_line = '>'+field_sep.join([species_name_cleaned,"",accession_cleaned])
+    #             else:
+    #                 # include #SEG
+    #                 #desc_line = '>'+'#'.join([str(ncbi_accession),str(species_name.replace(" ","_")),str(segment)])
+    #                 desc_line = '>'+field_sep.join([species_name_cleaned,segment_cleaned,accession_cleaned])
+    #             # add comments to fasta header
+    #             #desc_line = ' '.join([desc_line,family_name,Isolate_type,Isolate_ID,virus_names])
+    #             desc_line = ' '.join([desc_line,family_name,Isolate_type,virus_names])
                 
-                if args.verbose: print("    ", desc_line)
+    #             if args.verbose: print("    ", desc_line)
 
-                # write ICTV formated header to fasta
-                fa_file.write(desc_line+"\n"+fa_seq)
-                fa_file.close()
-                if args.verbose: print('    wrote: '+files)
+    #             # write ICTV formated header to fasta
+    #             fa_file.write(desc_line+"\n"+fa_seq)
+    #             fa_file.close()
+    #             if args.verbose: print('    wrote: '+files)
                 
-            count=count+1
+    #         count=count+1
 
-    # output accession table, WITH fasta filenames
-    pd.DataFrame.to_csv(Accessions,processed_accessions_fanames_fname,sep='\t')
-    print("Wrote to {0} rows, {1} columns to {2}".format(*Accessions.shape,processed_accessions_fanames_fname) )
+    # # output accession table, WITH fasta filenames
+    # pd.DataFrame.to_csv(Accessions,processed_accessions_fanames_fname,sep='\t')
+    # print("Wrote to {0} rows, {1} columns to {2}".format(*Accessions.shape,processed_accessions_fanames_fname) )
 
-    # wrap up and report errors
-    print("Bad_Accession count:", len(bad_accessions.index))
-    pd.DataFrame.to_csv(bad_accessions,bad_accessions_fname,sep='\t')
-    print("Wrote to ", bad_accessions_fname)
+    # # wrap up and report errors
+    # print("Bad_Accession count:", len(bad_accessions.index))
+    # pd.DataFrame.to_csv(bad_accessions,bad_accessions_fname,sep='\t')
+    # print("Wrote to ", bad_accessions_fname)
 
     
 #######################################################################################################################################
