@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 import re
 import pandas as pd
 import json
+import logging
 from math import ceil
 import os
 import sys
@@ -72,7 +73,7 @@ class FileData():
 class SearchResults():
    database_name: str
    database_title: str
-   errors: str
+   errors: List[str]
    files: List[FileData]
    input_dir: str
    program_name: str
@@ -91,7 +92,9 @@ class Settings():
    verbose: bool
 
 
+#---------------------------------------------------------------------------------------------------
 # A FASTA file containing a single sequence.
+#---------------------------------------------------------------------------------------------------
 class SequenceFile():
 
    # The input file's extension (suffix).
@@ -130,23 +133,27 @@ class SequenceFile():
       self.input_basename = input_path.stem
       self.extension = input_path.suffix
 
-      print("TEST: in SequenceFile c-tor")
-
       # Determine the "readable" version of the input file's base name.
       self.readable_basename = self.input_basename if not settings.decode_filenames else decode_file_basename(self.input_basename)
       
+   #---------------------------------------------------------------------------------------------------
    # Get the sequence filename
+   #---------------------------------------------------------------------------------------------------
    def get_filename(self) -> str:
 
       suffix = "" if self.sequence_number == None else generate_fasta_basename_suffix(self.sequence_number)
 
       return f"{self.input_basename}{suffix}{self.extension}"
    
+   #---------------------------------------------------------------------------------------------------
    # Get the input filename
+   #---------------------------------------------------------------------------------------------------
    def get_input_filename(self) -> str:
       return f"{self.input_basename}{self.extension}"
    
+   #---------------------------------------------------------------------------------------------------
    # Get a readable version of the sequence filename.
+   #---------------------------------------------------------------------------------------------------
    def get_readable_filename(self) -> str:
 
       suffix = "" if self.sequence_number == None else generate_fasta_basename_suffix(self.sequence_number)
@@ -345,8 +352,7 @@ def create_json_file() -> None:
       outfile.close()
 
    except Exception as e:
-      print(f"Error writing JSON file: {e}")
-      sys.exit(1)
+      logging.error(f"Error writing JSON file: {str(e)}")
 
 
 #---------------------------------------------------------------------------------------------------
@@ -354,9 +360,7 @@ def create_json_file() -> None:
 # the word "seq" followed by a 4 digit record number.
 #---------------------------------------------------------------------------------------------------
 def decode_file_basename(encoded_basename: str) -> str:
-      
-   print(f"TEST in decode_file_basename with encoded_basename = {encoded_basename}")
-   
+
    # Trim and validate
    encoded_basename = encoded_basename.strip()
    if len(encoded_basename) < 1:
@@ -371,15 +375,13 @@ def decode_file_basename(encoded_basename: str) -> str:
    # Add enough padding to make the string length a multiple of 4.
    encoded_basename += "=" * ((4 * ceil(length/4)) - length)
 
-   print(f"TEST: before base64url decoding the encoded_basename = {encoded_basename}")
-
    # The name is decoded as binary and needs to be converted to a UTF-8 string.
    return base64.urlsafe_b64decode(encoded_basename).decode("utf-8")
 
 
 #---------------------------------------------------------------------------------------------------
-# Generate a suffix for the basename based on the record number.
-# The suffix will be an underscore and the word "seq" followed by a 4 digit record number.
+# Generate a suffix for the basename based on the record number. 
+# Note: The suffix will be an underscore and the word "seq" followed by a 4 digit record number.
 #---------------------------------------------------------------------------------------------------
 def generate_fasta_basename_suffix(recordNumber: int) -> str:
       
@@ -422,7 +424,7 @@ def get_database_title() -> str:
 
 
 #---------------------------------------------------------------------------------------------------
-# Get the version number
+# Get the version number from version_git.txt.
 #---------------------------------------------------------------------------------------------------
 def get_git_version() -> str:
     
@@ -435,8 +437,7 @@ def get_git_version() -> str:
       print("Version: ", git_version)
 
    except Exception as e:
-      print(f"Error writing JSON file: {e}")
-      sys.exit(1)
+      logging.error(f"Error opening version_git.txt: {str(e)}")
    
    return git_version
 
@@ -444,34 +445,35 @@ def get_git_version() -> str:
 # Is this a valid nucleotide or amino acid sequence?
 def is_valid_sequence(sequence: str) -> bool:
 
-   # For now, validate as either nucleotide or amino acid.
-   return set(sequence.upper()) <= VALID_NT or set(sequence.upper()) <= VALID_AA
+   # Validate as a nucleotide sequence.
+   return set(sequence.upper()) <= VALID_NT # or set(sequence.upper()) <= VALID_AA
+
 
 
 #---------------------------------------------------------------------------------------------------
-# The main / entry point function.
+# The main function
 #---------------------------------------------------------------------------------------------------
 def main() -> None:
 
    global parsed_data_df
    global search_results
 
+   # Initialize the search results that will be serialized as a JSON output file.
+   search_results = SearchResults(
+      database_name = str(settings.blastdb),
+      database_title = "",
+      errors = [],
+      files = [],
+      input_dir = settings.indir,
+      program_name = os.path.basename(sys.argv[0]),
+      version = ""
+   )
+
    try:
       # Get the BLAST database title and git version.
-      db_title = get_database_title()
-      version = get_git_version()
+      search_results.database_title = get_database_title()
+      search_results.version = get_git_version()
 
-      # Initialize the search results that will be serialized as a JSON output file.
-      search_results = SearchResults(
-         database_name = str(settings.blastdb),
-         database_title = db_title,
-         errors = "",
-         files = [],
-         input_dir = settings.indir,
-         program_name = os.path.basename(sys.argv[0]),
-         version = version
-      )
-      
       # parsed_data_df is df for the processed_accessions_b.tsv file
       parsed_data_df = pd.read_csv(PROCESSED_ACCESSIONS_FILENAME, sep="\t", header=0)
       if (parsed_data_df.empty):
@@ -480,7 +482,7 @@ def main() -> None:
       # Iterate over FASTA input files and split files with multiple sequences.
       split_files = split_input_files()
       if not split_files or len(split_files) < 1:
-         raise Exception("No FASTA files were found for processing\n")
+         raise Exception("No FASTA files were found for processing")
 
       # Process all FASTA files
       for split_file in split_files:
@@ -495,12 +497,11 @@ def main() -> None:
          # Add it to the search results.
          search_results.files.append(file_data)
 
-      # Create the JSON output file using search_results.
-      create_json_file()
-
    except Exception as e:
-      sys.stderr.write(f"\nThe following error occurred: {str(e)}\n")
-      exit(1)
+      logging.error(f"The following error occurred: {str(e)}")
+
+   # Create the JSON output file using search_results.
+   create_json_file()
 
 
 #---------------------------------------------------------------------------------------------------
@@ -516,7 +517,7 @@ def process_fasta_file(sequence_file: SequenceFile):
    readable_input_filename = sequence_file.get_readable_input_filename()
 
    # Create a message specific to whether this is a split file and whether it's decoded.
-   message = "\nProcessing FASTA file "
+   message = "Processing FASTA file "
    if not sequence_file.is_split:
       message += f"{input_filename}"
       if settings.decode_filenames:
@@ -545,7 +546,7 @@ def process_fasta_file(sequence_file: SequenceFile):
       run_blast(filename)
 
    except RuntimeError as e:
-      print(str(e))
+      logging.error(str(e))
 
       # Update the input file's errors and add it back to the file data lookup.
       input_file_data.errors.append(str(e))
@@ -575,19 +576,18 @@ def process_fasta_file(sequence_file: SequenceFile):
       # Read in csv file and set headers to extract data. Process the file only if it's successfully read.
       df = pd.read_csv(blastcsv_output_filepath, header=0, names=CSV_COLUMNS)
 
-      print(f"\nLoading CSV file {blastcsv_output_filepath}")
+      print(f"Loading CSV file {blastcsv_output_filepath}")
       print("Number of rows: ", len(df))
-      print(f"Number of rows in {PROCESSED_ACCESSIONS_FILENAME}: ",len(parsed_data_df))
+      print(f"Number of rows in {PROCESSED_ACCESSIONS_FILENAME}: ", len(parsed_data_df))
       if settings.verbose: 
-         print("\nCSV data:")
-         print(df,"\n")
+         print("CSV data:")
+         print(df)
 
-         print(f"\n{PROCESSED_ACCESSIONS_FILENAME} data:")
-         print(parsed_data_df,"\n")
+         print(f"{PROCESSED_ACCESSIONS_FILENAME} data:")
+         print(parsed_data_df)
 
       # initializing the sBaseAccession column in df that is used for joining
       df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\..*$', r'\1',regex=True)
-      #print("\n", df["sBaseAccession"])
 
       # merging the two dataframes by the sBaseAccession column and the Accession column
       merge_dfs = pd.merge(df, parsed_data_df, left_on="sBaseAccession", right_on= "Accession", how="left")
@@ -598,17 +598,16 @@ def process_fasta_file(sequence_file: SequenceFile):
       if merge_missing > 0:
 
          # Generate an error message and print it.
-         error_message = f"INTERNAL ERROR: {merge_missing} out of {len(df)} sseqid.base_accession's didn't match to processed_accessions table. Check if your blastdb and processed_accesions table are out of sync.\n"
-         sys.stderr.write(error_message)
+         error_message = f"INTERNAL ERROR: {merge_missing} out of {len(df)} sseqid.base_accession's didn't match to processed_accessions table. Check if your blastdb and processed_accesions table are out of sync."
+         logging.error(error_message)
 
          # Update the input file's errors.
          input_file_data.errors.append(error_message)
 
       if len(df) < len(merge_dfs):
 
-         # Generate an error message and print it.
-         error_message = "INTERNAL ERROR: merging blast results to processed_accessions added extra rows. Check if your blastdb and processed_accesions table are out of sync.\n"
-         sys.stderr.write(error_message)
+         error_message = "INTERNAL ERROR: merging blast results to processed_accessions added extra rows. Check if your blastdb and processed_accesions table are out of sync."
+         logging.error(error_message)
 
          # Update the input file's errors and add it back to the file data lookup.
          input_file_data.errors.append(error_message)
@@ -631,17 +630,9 @@ def process_fasta_file(sequence_file: SequenceFile):
 
          hitCount += 1
 
-         # TODO: Are we supposed to write a TSV file?
-         # Write TSV file
-         #pd.DataFrame(GroupedHits[blastcsv_output_filepath]["hits"]).to_csv(
-         #   os.path.join(args.outdir, f"{os.path.basename(blastcsv_output_filepath)}_hits.tsv"))
-
-         #print("Wrote tsv file: ", os.path.join(args.outdir, blastcsv_output_filepath + "_hits.tsv"))
-
    except pd.errors.EmptyDataError:
-      error_message = f"{blastcsv_output_filepath} is empty and has been skipped. status: NO_HITS\n"
-      
-      sys.stderr.write(error_message)
+      error_message = f"{blastcsv_output_filepath} is empty and has been skipped. status: NO_HITS"
+      logging.error(error_message)
 
       # Update the input file data and add it to the file data lookup.
       input_file_data.errors.append(error_message)
@@ -649,12 +640,10 @@ def process_fasta_file(sequence_file: SequenceFile):
       return
    
    except Exception as e:
-      error_message = f"{str(e)}\n"
-
-      sys.stderr.write(error_message)
+      logging.error(str(e))
 
       # Update the input file data and add it to the file data lookup.
-      input_file_data.errors.append(error_message)
+      input_file_data.errors.append(str(e))
       file_data_lookup[input_filename] = input_file_data
       return
 
@@ -694,9 +683,9 @@ def run_blast(filename: str):
       subprocess.run(blastasn_cmd, capture_output=True, text=True, check=True)
 
    except subprocess.CalledProcessError as e:
-      raise RuntimeError(f"Runtime error from blastn command:\n{e.stderr}")
+      raise RuntimeError(f"Runtime error from blastn command: {e.stderr}")
    except Exception as ex:
-      raise RuntimeError(f"Error running blastn command:\n{str(ex)}")
+      raise RuntimeError(f"Error running blastn command: {str(ex)}")
 
    # Generate the CSV output file.
    try:
@@ -711,11 +700,10 @@ def run_blast(filename: str):
       df.to_csv(blastcsv_output_filepath, index=False)
 
    except subprocess.CalledProcessError as e:
-      sys.stderr.write(f"Process error from blast_formatter (CSV) command:\n{e.stderr}")
+      logging.error(f"\"Called process\" error in blast_formatter's (CSV) command: {e.stderr}")
       return
-
    except Exception as ex:
-      sys.stderr.write(f"Error running blast_formatter (CSV) command:\n{str(ex)}")
+      logging.error(f"Error running blast_formatter (CSV) command: {str(ex)}")
       return
    
    # Generate the HTML output file.
@@ -726,10 +714,10 @@ def run_blast(filename: str):
       subprocess.run(blasthtml_cmd, capture_output=True, text=True, check=True)
 
    except subprocess.CalledProcessError as e:
-      sys.stderr.write(f"Runtime error from blast_formatter (HTML) command:\n{e.stderr}\n")
+      logging.error(f"Runtime error from blast_formatter (HTML) command: {e.stderr}")
       return
    except Exception as ex:
-      sys.stderr.write(f"Error running blast_formatter (HTML) command:\n{str(ex)}")
+      logging.error(f"Error running blast_formatter (HTML) command: {str(ex)}")
       return
    
 
@@ -785,7 +773,7 @@ def split_input_files() -> list[SequenceFile] | None:
 
          # Does the sequence have valid bases?
          if not is_valid_sequence(str(sequence.seq)):
-            sys.stderr.write(f"Sequence {input_file.name} has invalid bases\n")
+            logging.error(f"Sequence {input_file.name} has invalid bases")
             continue
 
          # Add a SequenceFile object for the input file.
@@ -805,7 +793,7 @@ def split_input_files() -> list[SequenceFile] | None:
 
          # Does the sequence have valid bases?
          if not is_valid_sequence(str(sequence.seq)):
-            sys.stderr.write(f"Sequence {s} in {input_file.name} has invalid bases\n")
+            logging.error(f"Sequence {s} in {input_file.name} has invalid bases")
             continue
 
          # Create a sequence file object for the split file.
