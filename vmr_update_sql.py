@@ -293,9 +293,9 @@ class ErrorCollector:
                 if ictv_col_idx is not None:
                     cell = worksheet.cell(row=excel_row, column=ictv_col_idx)
                     value = cell.value
-                    if isinstance(value, str):
-                        stripped = value.strip()
-                        if re.fullmatch(r"VMR\d+", stripped):
+                    if value is not None:
+                        stripped = str(value).strip()
+                        if stripped:
                             cell.hyperlink = f"https://ictv.global/id/{stripped}"
                             cell.style = "Hyperlink"
                 if accession_col_idx is not None:
