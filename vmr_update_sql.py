@@ -24,6 +24,7 @@ ERROR_FILENAME = "errors.xlsx"
 DELETES_FILENAME = "vmr_1_deletes.sql"
 UPDATES_FILENAME = "vmr_2_updates.sql"
 INSERTS_FILENAME = "vmr_3_inserts.sql"
+COLUMN_VALUE_INSERTS_FILENAME = "vmr_0_cv_inserts.sql"
 VERSION_FILE = Path("version_git.txt")
 
 # Columns A:AG that must appear (in order) on the worksheets we process.
@@ -143,6 +144,28 @@ class ProcessingHalted(Exception):
 
 
 @dataclass
+class ColumnValueInsertEntry:
+    column: str
+    value: str
+    rows: List[int]
+
+
+@dataclass(frozen=True)
+class ColumnValueTarget:
+    table: str
+    columns: Tuple[str, ...]
+
+
+COLUMN_VALUE_TARGETS = {
+    "host source": ColumnValueTarget("taxonomy_host_source", ("host_source",)),
+    "genome coverage": ColumnValueTarget(
+        "taxonomy_genome_coverage", ("genome_coverage",)
+    ),
+    "genome": ColumnValueTarget("taxonomy_molecule", ("abbrev", "name")),
+}
+
+
+@dataclass
 class ErrorEntry:
     filename: str
     worksheet: str
@@ -179,6 +202,7 @@ class ProcessResult:
     delete_entries: List[DeleteEntry]
     update_entries: List[UpdateEntry]
     insert_entries: List[InsertEntry]
+    column_value_inserts: List[ColumnValueInsertEntry]
 
 
 class ErrorCollector:
@@ -381,6 +405,11 @@ def parse_args() -> argparse.Namespace:
         help="Filename for INSERT statements (default: %(default)s)",
     )
     parser.add_argument(
+        "--column-values-sql",
+        default=COLUMN_VALUE_INSERTS_FILENAME,
+        help="Filename for column value INSERT statements (default: %(default)s)",
+    )
+    parser.add_argument(
         "--errors-xlsx",
         default=ERROR_FILENAME,
         help="Filename for the error report workbook (default: %(default)s)",
@@ -555,7 +584,8 @@ def check_column_value_revisions(
     workbook_name: str,
     updated_df: pd.DataFrame,
     errors: ErrorCollector,
-) -> None:
+) -> Dict[str, Dict[str, List[int]]]:
+    new_values: Dict[str, Dict[str, List[int]]] = {}
     try:
         original_df = pd.read_excel(
             workbook, sheet_name="Original Column Values", header=0
@@ -567,7 +597,7 @@ def check_column_value_revisions(
             None,
             "Workbook does not contain an 'Original Column Values' worksheet.",
         )
-        return
+        return {}
 
     updated_map = build_column_value_maps(updated_df)
     original_map = build_column_value_maps(original_df)
@@ -585,6 +615,7 @@ def check_column_value_revisions(
                         "Column Values'."
                     ),
                 )
+                new_values.setdefault(column, {})[value] = rows
             continue
         for value, rows in values.items():
             if value not in original_values:
@@ -597,6 +628,7 @@ def check_column_value_revisions(
                         "Column Values'."
                     ),
                 )
+                new_values.setdefault(column, {})[value] = rows
 
     for column, values in original_map.items():
         updated_values = updated_map.get(column, {})
@@ -622,10 +654,12 @@ def check_column_value_revisions(
                     ),
                 )
 
+    return new_values
+
 
 def read_column_value_constraints(
     workbook: Path, workbook_name: str, errors: ErrorCollector
-) -> Dict[str, ColumnConstraint]:
+) -> Tuple[Dict[str, ColumnConstraint], List[ColumnValueInsertEntry]]:
     try:
         column_values_df = pd.read_excel(workbook, sheet_name="Column Values", header=0)
     except ValueError:
@@ -636,9 +670,11 @@ def read_column_value_constraints(
             "Workbook does not contain a 'Column Values' worksheet; column value validation skipped.",
             severity="WARNING",
         )
-        return {}
+        return {}, []
 
-    check_column_value_revisions(workbook, workbook_name, column_values_df, errors)
+    new_column_values = check_column_value_revisions(
+        workbook, workbook_name, column_values_df, errors
+    )
 
     constraints: Dict[str, ColumnConstraint] = {}
     for raw_column in column_values_df.columns:
@@ -661,7 +697,16 @@ def read_column_value_constraints(
                 canonical_map[canonical] = value
         if allowed_values:
             constraints[column_name] = ColumnConstraint(allowed_values, canonical_map)
-    return constraints
+    column_value_inserts: List[ColumnValueInsertEntry] = []
+    for column in sorted(new_column_values.keys(), key=lambda name: name.lower()):
+        values = new_column_values[column]
+        for value, rows in sorted(
+            values.items(), key=lambda item: item[0].lower() if isinstance(item[0], str) else str(item[0])
+        ):
+            column_value_inserts.append(
+                ColumnValueInsertEntry(column=column, value=value, rows=sorted(set(rows)))
+            )
+    return constraints, column_value_inserts
 
 
 def check_column_value_constraints(
@@ -1283,6 +1328,42 @@ def build_insert_sql_text(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def build_column_value_insert_sql_text(
+    entries: List[ColumnValueInsertEntry], workbook_path: Path, version: str
+) -> str:
+    lines = generate_sql_header(workbook_path, version)
+    if not entries:
+        lines.append("-- No column value inserts required.")
+        return "\n".join(lines) + "\n"
+    for entry in entries:
+        target = COLUMN_VALUE_TARGETS.get(entry.column.lower())
+        if target is None:
+            lines.append(
+                (
+                    f"-- No database mapping configured for column '{entry.column}' with "
+                    f"value '{entry.value}'; skipping."
+                )
+            )
+            lines.append("")
+            continue
+        row_text_values = [str(row) for row in entry.rows]
+        row_text = ", ".join(row_text_values) if row_text_values else "unknown"
+        lines.append(
+            (
+                f"-- Column '{entry.column}' value '{entry.value}' from 'Column Values' "
+                f"row(s) {row_text}"
+            )
+        )
+        lines.append(f"INSERT INTO {target.table} (")
+        lines.append("    " + ",\n    ".join(target.columns))
+        lines.append(") VALUES (")
+        values = [format_sql_value(column, entry.value) for column in target.columns]
+        lines.append("    " + ",\n    ".join(values))
+        lines.append(");")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def build_delete_sql_text(
     entries: List[DeleteEntry], workbook_path: Path, version: str
 ) -> str:
@@ -1334,11 +1415,15 @@ def process_workbook(
                 None,
                 "Workbook does not contain an 'Original' worksheet.",
             )
-        return ProcessResult(updated_sheet, [], [], [])
+        return ProcessResult(updated_sheet, [], [], [], [])
 
     column_constraints: Dict[str, ColumnConstraint] = {}
+    column_value_inserts: List[ColumnValueInsertEntry] = []
     if "Column Values" in sheet_names:
-        column_constraints = read_column_value_constraints(workbook_path, workbook_name, errors)
+        (
+            column_constraints,
+            column_value_inserts,
+        ) = read_column_value_constraints(workbook_path, workbook_name, errors)
     else:
         errors.add(
             workbook_name,
@@ -1394,7 +1479,13 @@ def process_workbook(
 
     register_error_context(errors, updated_df, original_df, updated_sheet)
 
-    return ProcessResult(updated_sheet, delete_entries, update_entries, insert_entries)
+    return ProcessResult(
+        updated_sheet,
+        delete_entries,
+        update_entries,
+        insert_entries,
+        column_value_inserts,
+    )
 
 
 def write_sql_outputs(
@@ -1409,6 +1500,7 @@ def write_sql_outputs(
     deletes_path = output_dir / args.deletes_sql
     updates_path = output_dir / args.updates_sql
     inserts_path = output_dir / args.inserts_sql
+    column_values_path = output_dir / args.column_values_sql
     workbook_display = workbook_path.resolve()
 
     if had_errors or result.updated_sheet is None:
@@ -1417,14 +1509,19 @@ def write_sql_outputs(
         deletes_path.write_text(placeholder, encoding="utf-8")
         updates_path.write_text(placeholder, encoding="utf-8")
         inserts_path.write_text(placeholder, encoding="utf-8")
+        column_values_path.write_text(placeholder, encoding="utf-8")
         return
 
     deletes_sql = build_delete_sql_text(result.delete_entries, workbook_display, version)
     updates_sql = build_update_sql_text(result.update_entries, workbook_display, version)
     inserts_sql = build_insert_sql_text(result.insert_entries, workbook_display, version)
+    column_values_sql = build_column_value_insert_sql_text(
+        result.column_value_inserts, workbook_display, version
+    )
     deletes_path.write_text(deletes_sql, encoding="utf-8")
     updates_path.write_text(updates_sql, encoding="utf-8")
     inserts_path.write_text(inserts_sql, encoding="utf-8")
+    column_values_path.write_text(column_values_sql, encoding="utf-8")
 
 
 def main() -> None:
@@ -1448,7 +1545,7 @@ def main() -> None:
         version=version,
         run_date=run_timestamp,
     )
-    result = ProcessResult(None, [], [], [])
+    result = ProcessResult(None, [], [], [], [])
 
     if not workbook_path.exists():
         errors.add(
