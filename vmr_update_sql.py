@@ -1266,14 +1266,19 @@ def build_delete_entries(
     return entries
 
 
-def generate_sql_header(workbook_path: Path, version: str) -> List[str]:
+def generate_sql_header(
+    workbook_path: Path, version: str, warning: Optional[str] = None
+) -> List[str]:
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S %Z")
-    return [
+    lines = [
         f"-- Source workbook: {workbook_path}",
         f"-- Generated: {timestamp}",
         f"-- Script version: {version}",
-        "",
     ]
+    if warning:
+        lines.append(warning)
+    lines.append("")
+    return lines
 
 
 def format_sql_value(column: str, value: Optional[object]) -> str:
@@ -1288,9 +1293,12 @@ def format_sql_value(column: str, value: Optional[object]) -> str:
 
 
 def build_update_sql_text(
-    entries: List[UpdateEntry], workbook_path: Path, version: str
+    entries: List[UpdateEntry],
+    workbook_path: Path,
+    version: str,
+    warning: Optional[str] = None,
 ) -> str:
-    lines = generate_sql_header(workbook_path, version)
+    lines = generate_sql_header(workbook_path, version, warning)
     if not entries:
         lines.append("-- No updates required.")
         return "\n".join(lines) + "\n"
@@ -1309,9 +1317,12 @@ def build_update_sql_text(
 
 
 def build_insert_sql_text(
-    entries: List[InsertEntry], workbook_path: Path, version: str
+    entries: List[InsertEntry],
+    workbook_path: Path,
+    version: str,
+    warning: Optional[str] = None,
 ) -> str:
-    lines = generate_sql_header(workbook_path, version)
+    lines = generate_sql_header(workbook_path, version, warning)
     if not entries:
         lines.append("-- No inserts required.")
         return "\n".join(lines) + "\n"
@@ -1329,9 +1340,12 @@ def build_insert_sql_text(
 
 
 def build_column_value_insert_sql_text(
-    entries: List[ColumnValueInsertEntry], workbook_path: Path, version: str
+    entries: List[ColumnValueInsertEntry],
+    workbook_path: Path,
+    version: str,
+    warning: Optional[str] = None,
 ) -> str:
-    lines = generate_sql_header(workbook_path, version)
+    lines = generate_sql_header(workbook_path, version, warning)
     if not entries:
         lines.append("-- No column value inserts required.")
         return "\n".join(lines) + "\n"
@@ -1365,9 +1379,12 @@ def build_column_value_insert_sql_text(
 
 
 def build_delete_sql_text(
-    entries: List[DeleteEntry], workbook_path: Path, version: str
+    entries: List[DeleteEntry],
+    workbook_path: Path,
+    version: str,
+    warning: Optional[str] = None,
 ) -> str:
-    lines = generate_sql_header(workbook_path, version)
+    lines = generate_sql_header(workbook_path, version, warning)
     if not entries:
         lines.append("-- No deletes required.")
         return "\n".join(lines) + "\n"
@@ -1386,14 +1403,6 @@ def build_delete_sql_text(
         )
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
-
-
-def build_placeholder_sql_text(
-    workbook_path: Path, version: str, note: str
-) -> str:
-    lines = generate_sql_header(workbook_path, version)
-    lines.append(f"-- {note}")
-    return "\n".join(lines) + "\n"
 
 
 def process_workbook(
@@ -1503,20 +1512,23 @@ def write_sql_outputs(
     column_values_path = output_dir / args.column_values_sql
     workbook_display = workbook_path.resolve()
 
-    if had_errors or result.updated_sheet is None:
-        note = "Errors encountered; SQL generation skipped."
-        placeholder = build_placeholder_sql_text(workbook_display, version, note)
-        deletes_path.write_text(placeholder, encoding="utf-8")
-        updates_path.write_text(placeholder, encoding="utf-8")
-        inserts_path.write_text(placeholder, encoding="utf-8")
-        column_values_path.write_text(placeholder, encoding="utf-8")
-        return
+    warning_text: Optional[str]
+    if had_errors:
+        warning_text = "Errors encountered; SQL generation may be incorrect."
+    else:
+        warning_text = None
 
-    deletes_sql = build_delete_sql_text(result.delete_entries, workbook_display, version)
-    updates_sql = build_update_sql_text(result.update_entries, workbook_display, version)
-    inserts_sql = build_insert_sql_text(result.insert_entries, workbook_display, version)
+    deletes_sql = build_delete_sql_text(
+        result.delete_entries, workbook_display, version, warning_text
+    )
+    updates_sql = build_update_sql_text(
+        result.update_entries, workbook_display, version, warning_text
+    )
+    inserts_sql = build_insert_sql_text(
+        result.insert_entries, workbook_display, version, warning_text
+    )
     column_values_sql = build_column_value_insert_sql_text(
-        result.column_value_inserts, workbook_display, version
+        result.column_value_inserts, workbook_display, version, warning_text
     )
     deletes_path.write_text(deletes_sql, encoding="utf-8")
     updates_path.write_text(updates_sql, encoding="utf-8")
