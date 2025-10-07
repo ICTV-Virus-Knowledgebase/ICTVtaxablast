@@ -17,6 +17,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 import pandas as pd
 from openpyxl.styles import PatternFill
+from openpyxl.utils import get_column_letter
 
 DEFAULT_WORKBOOK = Path("./VMRs/VMR_MSL40.v1.20250307.editor_DBS_22 July.xlsx")
 ERROR_FILENAME = "errors.xlsx"
@@ -314,6 +315,20 @@ class ErrorCollector:
                                 f"https://www.ncbi.nlm.nih.gov/nuccore/{joined}"
                             )
                             cell.style = "Hyperlink"
+
+            for col_idx, column_name in enumerate(columns, start=1):
+                max_length = len(str(column_name))
+                for cell in worksheet.iter_rows(
+                    min_row=1,
+                    max_row=worksheet.max_row,
+                    min_col=col_idx,
+                    max_col=col_idx,
+                ):
+                    value = cell[0].value
+                    if value is None:
+                        continue
+                    max_length = max(max_length, len(str(value)))
+                worksheet.column_dimensions[get_column_letter(col_idx)].width = max_length + 2
 
 
 def parse_args() -> argparse.Namespace:
