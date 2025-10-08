@@ -114,7 +114,6 @@ INSERT_COLUMN_MAPPING: Sequence[Tuple[str, str]] = (
     ("genome_coverage", "Genome coverage"),
     ("molecule", "Genome"),
     ("host_source", "Host source"),
-    ("accession_links", "Accessions Link"),
     ("notes", "Editor Notes"),
 )
 
