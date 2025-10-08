@@ -180,6 +180,7 @@ class UpdateEntry:
     numeric_id: int
     row_number: int
     assignments: List[Tuple[str, Optional[object]]]
+    original_values: List[Tuple[str, Optional[object]]]
 
 
 @dataclass
@@ -1062,6 +1063,14 @@ def register_error_context(
         errors.register_row_context(updated_sheet, row_number, context_values, context_changes)
 
 
+def convert_original_value(sql_column: str, vmr_value: object) -> Optional[object]:
+    if sql_column in INT_COLUMNS:
+        return normalize_int_like(vmr_value)
+    if sql_column == "isolate_type":
+        return normalize_isolate_type(vmr_value)
+    return normalize_string(vmr_value)
+
+
 def convert_value(
     sql_column: str,
     vmr_value: object,
@@ -1134,6 +1143,7 @@ def build_update_entries(
         if isinstance(upd_row, pd.DataFrame):
             continue
         changes: List[Tuple[str, Optional[object]]] = []
+        original_values: List[Tuple[str, Optional[object]]] = []
         invalid = False
         for vmr_column, sql_column in UPDATABLE_TO_SQL.items():
             orig_value = orig_row[vmr_column]
@@ -1166,7 +1176,9 @@ def build_update_entries(
             if converted is INVALID_VALUE:
                 invalid = True
                 continue
+            original_converted = convert_original_value(sql_column, orig_value)
             changes.append((sql_column, converted))
+            original_values.append((sql_column, original_converted))
         if invalid or not changes:
             continue
         numeric_id = extract_isolate_numeric(isolate_id)
@@ -1184,6 +1196,7 @@ def build_update_entries(
                 numeric_id=numeric_id,
                 row_number=int(upd_row["__row_number"]),
                 assignments=changes,
+                original_values=original_values,
             )
         )
     return entries
@@ -1292,6 +1305,12 @@ def format_sql_value(column: str, value: Optional[object]) -> str:
     return f"'{text}'"
 
 
+def format_sql_condition(column: str, value: Optional[object]) -> str:
+    if value is None:
+        return f"{column} IS NULL"
+    return f"{column} = {format_sql_value(column, value)}"
+
+
 def build_update_sql_text(
     entries: List[UpdateEntry],
     workbook_path: Path,
@@ -1311,7 +1330,20 @@ def build_update_sql_text(
             for column, value in entry.assignments
         ]
         lines.append(",\n".join(assignments))
-        lines.append(f"WHERE isolate_id = {entry.numeric_id};")
+        where_prefix = f"WHERE isolate_id = {entry.numeric_id}"
+        if entry.original_values:
+            conditions = [
+                format_sql_condition(column, value)
+                for column, value in entry.original_values
+            ]
+            if len(conditions) == 1:
+                lines.append(f"{where_prefix} AND {conditions[0]};")
+            else:
+                lines.append(f"{where_prefix} AND (")
+                lines.append("    " + "\n    OR ".join(conditions))
+                lines.append(");")
+        else:
+            lines.append(f"{where_prefix};")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
