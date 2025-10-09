@@ -676,8 +676,20 @@ def run_blast(filename: str):
    fasta_path = f"{settings.indir}/{SEQUENCE_FILES_DIR}/{filename}"
 
    try:
-      blastasn_cmd = ["blastn", "-db", settings.blastdb, "-query", fasta_path, "-out", blastasn_output_filepath, "-outfmt", "11"]
-      print(" ".join(blastasn_cmd))
+      blastasn_cmd = ["blastn", 
+	# match NCBI BLAST website "blastn" parameters
+        "-task", "blastn",
+	"-evalue", "0.05", 
+	"-word_size", "11", 
+	"-reward", "2", "-penalty", "-3", 
+	"-gapopen", "5", "-gapextend", "2", 
+	"-dust", "yes", "-soft_masking", "true", 
+	# local settings
+	"-db", settings.blastdb, 
+	"-query", fasta_path, 
+	"-out", blastasn_output_filepath, 
+	"-outfmt", "11"]
+      print("BLAST COMMAND:"+(" ".join(blastasn_cmd)))
       
       # Run blastn on the FASTA file and generate an ASN file.
       subprocess.run(blastasn_cmd, capture_output=True, text=True, check=True)
