@@ -31,6 +31,7 @@ import re
 import sys
 import os
 import pathlib # for stem=basename(.txt)
+from Bio import SeqIO
 
 # Class needed to load args from files. 
 class LoadFromFile (argparse.Action):
@@ -375,7 +376,7 @@ def fetch_fasta(processed_accession_file_name):
             species_name = row.iloc[26]
             virus_names  = row.iloc[27]
             if args.verbose:
-                count+=1
+                # count+=1
                 print("Fetch [",count,"] ID:",Isolate_ID," Species:",species_name," Segment:",segment," Accession:",accession_ID)
 
             # emtpy cell becomes float:NaN!
@@ -388,8 +389,8 @@ def fetch_fasta(processed_accession_file_name):
             if genus_name == "":
                 genus_dir = args.fasta_dir+"/"+"no_genus"
             accession_gb = genus_dir+"/"+str(accession_ID)+".gb"
-            # accession_aa_fasta = genus_dir+"/"+str(accession_ID)+".faa."
-            # accession_nt_fasta = genus_dir+"/"+str(accession_ID)+".fna"
+            accession_aa_fasta = genus_dir+"/"+str(accession_ID)+".faa."
+            accession_nt_fasta = genus_dir+"/"+str(accession_ID)+".fna"
             
 
             
@@ -427,7 +428,7 @@ def fetch_fasta(processed_accession_file_name):
 
                     # prints out accession that got though cleaning
                     raw_fa = handle.read()
-                    raw_file.write(raw_fa);
+                    raw_file.write(raw_fa)
                     raw_file.close()
                     if args.verbose: print('    wrote: '+accession_gb)
 
@@ -437,64 +438,86 @@ def fetch_fasta(processed_accession_file_name):
 
             # check if processed fasta is out of date
             
-    #         if os.path.getsize(accession_gb) == 0:
-    #                 if args.verbose: print("[FORMAT] SKIP/ERROR raw files is empty for {files}".format(**locals()))
-    #             elif os.path.exists(files) and os.path.getmtime(files) > os.path.getmtime(nt_raw_file):
-    #                 if args.verbose: print("[FORMAT] SKIP reformat header for {files}".format(**locals()))
-    #         else:
-    #             if args.verbose: print("[FORMAT] EXEC reformat header for {files}".format(**locals()))
+            if os.path.getsize(accession_gb) == 0:
+                        if args.verbose: print("[FORMAT] SKIP/ERROR complete record files is empty for {accession_gb}".format(**locals()))
+            else:
                 
-    #             # open local raw genbank fasta
-    #             nt_raw_file = open(nt_raw_file,'r')
-    #             raw_fa = nt_raw_file.read()
-    #             nt_raw_file.close()
+                # open genbank file
+                gb_open = open(accession_gb,"r")
+                #read using SeqIO
+                gb_open = SeqIO.read(gb_open, "genbank")
+                if gb_open.seq:
+                    make_nt_file= open(accession_nt_fasta,'w')
+                    if segment == "":
+                        segment = "--"
+                    else:
+                        segment= segment
+                    
+                    
+                    first_line= ([species_name,segment,accession_ID,family_name,Isolate_type,virus_names])
+                    first_line= str(first_line).replace("[","").replace("]","").replace("'","").replace(","," ")
 
-    #             # open local (header modified) version
-    #             fa_file  = open(files,'w')
 
-    #             # parse out header and seq
-    #             fa_desc = raw_fa.split("\n")[0].replace(">","")
-    #             ncbi_accession = fa_desc.split(" ",1)[0]
-    #             fa_seq =    raw_fa.split("\n",1)[1]
+                    make_nt_file.write(">"+first_line+"\n")
 
-    #             # build ICTV-modified header
-    #             #  ACCESSION#VMR_SPECIES[#VMR_SEG] FAMILY TYPE VMR_ID ISOLATE_NAME 
 
-    #             #field_sep="#"
-    #             field_sep="-"
-    #             # remove spaces and field separators
-    #             species_name_cleaned = str(  species_name).replace(" ","_").replace("-","_")
-    #             segment_cleaned =      str(       segment).replace(" ","_").replace("-","_")
-    #             accession_cleaned =    str(ncbi_accession)
-    #             if str(segment).lower() == "":
-    #                 # leave out #SEG
-    #                 #desc_line = '>'+field_sep.join([str(ncbi_accession),str(species_name.replace(" ","_"))])
-    #                 desc_line = '>'+field_sep.join([species_name_cleaned,"",accession_cleaned])
-    #             else:
-    #                 # include #SEG
-    #                 #desc_line = '>'+'#'.join([str(ncbi_accession),str(species_name.replace(" ","_")),str(segment)])
-    #                 desc_line = '>'+field_sep.join([species_name_cleaned,segment_cleaned,accession_cleaned])
-    #             # add comments to fasta header
-    #             #desc_line = ' '.join([desc_line,family_name,Isolate_type,Isolate_ID,virus_names])
-    #             desc_line = ' '.join([desc_line,family_name,Isolate_type,virus_names])
+                    make_nt_file.write("{gb_open.seq}\n".format(**locals()))
+                    make_nt_file.close()
+                    if args.verbose: print('    wrote: '+accession_nt_fasta)
+                    else:
+                        if args.verbose: print("[FORMAT] SKIP/ERROR no sequence found in {accession_gb}".format(**locals()))
+                        bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
+                        continue
+
+
                 
-    #             if args.verbose: print("    ", desc_line)
 
-    #             # write ICTV formated header to fasta
-    #             fa_file.write(desc_line+"\n"+fa_seq)
-    #             fa_file.close()
-    #             if args.verbose: print('    wrote: '+files)
+                # open local (header modified) version
+                # fa_file  = open(files,'w')
+
+                # parse out header and seq
+                # fa_desc = raw_fa.split("\n")[0].replace(">","")
+                # ncbi_accession = fa_desc.split(" ",1)[0]
+                # fa_seq =    raw_fa.split("\n",1)[1]
+
+                # build ICTV-modified header
+                #  ACCESSION#VMR_SPECIES[#VMR_SEG] FAMILY TYPE VMR_ID ISOLATE_NAME 
+
+                # field_sep="#"
+                # field_sep="-"
+                # remove spaces and field separators
+                # species_name_cleaned = str(  species_name).replace(" ","_").replace("-","_")
+                # segment_cleaned =      str(       segment).replace(" ","_").replace("-","_")
+                # accession_cleaned =    str(ncbi_accession)
+                # if str(segment).lower() == "":
+                    # leave out #SEG
+                    # desc_line = '>'+field_sep.join([str(ncbi_accession),str(species_name.replace(" ","_"))])
+                    # desc_line = '>'+field_sep.join([species_name_cleaned,"",accession_cleaned])
+                # else:
+                    # include #SEG
+                #     desc_line = '>'+'#'.join([str(ncbi_accession),str(species_name.replace(" ","_")),str(segment)])
+                #     desc_line = '>'+field_sep.join([species_name_cleaned,segment_cleaned,accession_cleaned])
+                # # add comments to fasta header
+                # desc_line = ' '.join([desc_line,family_name,Isolate_type,Isolate_ID,virus_names])
+                # desc_line = ' '.join([desc_line,family_name,Isolate_type,virus_names])
                 
-    #         count=count+1
+                # if args.verbose: print("    ", desc_line)
 
-    # # output accession table, WITH fasta filenames
-    # pd.DataFrame.to_csv(Accessions,processed_accessions_fanames_fname,sep='\t')
-    # print("Wrote to {0} rows, {1} columns to {2}".format(*Accessions.shape,processed_accessions_fanames_fname) )
+                # write ICTV formated header to fasta
+                # fa_file.write(desc_line+"\n"+fa_seq)
+                # fa_file.close()
+                # if args.verbose: print('    wrote: '+files)
+                
+            count=count+1
 
-    # # wrap up and report errors
-    # print("Bad_Accession count:", len(bad_accessions.index))
-    # pd.DataFrame.to_csv(bad_accessions,bad_accessions_fname,sep='\t')
-    # print("Wrote to ", bad_accessions_fname)
+    # output accession table, WITH fasta filenames
+    pd.DataFrame.to_csv(Accessions,processed_accessions_fanames_fname,sep='\t')
+    print("Wrote to {0} rows, {1} columns to {2}".format(*Accessions.shape,processed_accessions_fanames_fname) )
+
+    # wrap up and report errors
+    print("Bad_Accession count:", len(bad_accessions.index))
+    pd.DataFrame.to_csv(bad_accessions,bad_accessions_fname,sep='\t')
+    print("Wrote to ", bad_accessions_fname)
 
     
 #######################################################################################################################################
