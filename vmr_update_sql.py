@@ -214,7 +214,7 @@ class ErrorCollector:
         self.command = command
         self.version = version
         self.run_date = run_date
-        self.row_context: Dict[Tuple[str, int], Dict[str, Dict[str, object]]] = {}
+        self.row_context: Dict[Tuple[str, int], Dict[str, object]] = {}
 
     def add(
         self,
@@ -251,8 +251,13 @@ class ErrorCollector:
         row_number: int,
         values: Dict[str, object],
         changes: Dict[str, bool],
+        isolate_id: Optional[str],
     ) -> None:
-        self.row_context[(worksheet, row_number)] = {"values": values, "changes": changes}
+        self.row_context[(worksheet, row_number)] = {
+            "values": values,
+            "changes": changes,
+            "isolate_id": isolate_id,
+        }
 
     def write_excel(self, output_path: Path) -> None:
         context_headers = [display for display, _ in ERROR_CONTEXT_COLUMNS]
@@ -272,6 +277,10 @@ class ErrorCollector:
             context = None
             if entry.row is not None:
                 context = self.row_context.get((entry.worksheet, int(entry.row)))
+            isolate_id_value = None
+            if context:
+                isolate_id_value = context.get("isolate_id")
+            row_data["Isolate ID"] = isolate_id_value
             context_changes: Dict[str, bool] = {}
             for display in context_headers:
                 value = None
@@ -288,6 +297,7 @@ class ErrorCollector:
             "filename",
             "worksheet",
             "row",
+            "Isolate ID",
             *context_headers,
             "message",
             "severity",
@@ -309,6 +319,7 @@ class ErrorCollector:
                 if "Virus GENBANK accession" in columns
                 else None
             )
+            isolate_col_idx = columns.index("Isolate ID") + 1 if "Isolate ID" in columns else None
             for row_offset, flags in enumerate(change_flags):
                 excel_row = start_row + row_offset
                 for display in context_headers:
@@ -322,6 +333,19 @@ class ErrorCollector:
                         stripped = str(value).strip()
                         if stripped:
                             cell.hyperlink = f"https://ictv.global/id/{stripped}"
+                            cell.style = "Hyperlink"
+                if isolate_col_idx is not None:
+                    cell = worksheet.cell(row=excel_row, column=isolate_col_idx)
+                    value = cell.value
+                    if value is not None:
+                        stripped = str(value).strip()
+                        if stripped:
+                            upper_value = stripped.upper()
+                            numeric_part = (
+                                upper_value[3:] if upper_value.startswith("VMR") else upper_value
+                            )
+                            hyperlink = f"https://ictv.global/id/VMR{numeric_part}"
+                            cell.hyperlink = hyperlink
                             cell.style = "Hyperlink"
                 if accession_col_idx is not None:
                     cell = worksheet.cell(row=excel_row, column=accession_col_idx)
@@ -1059,7 +1083,13 @@ def register_error_context(
                 context_changes[display] = not values_equal(
                     orig_row[source_column], value, source_column
                 )
-        errors.register_row_context(updated_sheet, row_number, context_values, context_changes)
+        errors.register_row_context(
+            updated_sheet,
+            row_number,
+            context_values,
+            context_changes,
+            isolate_id if isinstance(isolate_id, str) else None,
+        )
 
 
 def convert_original_value(sql_column: str, vmr_value: object) -> Optional[object]:
