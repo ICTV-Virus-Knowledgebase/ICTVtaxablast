@@ -389,7 +389,7 @@ def fetch_fasta(processed_accession_file_name):
             if genus_name == "":
                 genus_dir = args.fasta_dir+"/"+"no_genus"
             accession_gb = genus_dir+"/"+str(accession_ID)+".gb"
-            accession_aa_fasta = genus_dir+"/"+str(accession_ID)+".faa."
+            accession_aa_fasta = genus_dir+"/"+str(accession_ID)+".faa"
             accession_nt_fasta = genus_dir+"/"+str(accession_ID)+".fna"
             
 
@@ -469,45 +469,24 @@ def fetch_fasta(processed_accession_file_name):
                         bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
                         continue
 
+                    with open(accession_aa_fasta, "w") as make_aa_file:
+                        
+                        for feature in gb_open.features:
+                            if feature.type == "CDS" and "translation" in feature.qualifiers:
+                # Build FASTA header
+                                protein_id = feature.qualifiers.get("protein_id", ["unknown_protein"])[0]
+                                gene_name = feature.qualifiers.get("gene", ["unknown_gene"])[0]
+                                header = f">{protein_id} {gene_name}"
 
-                
-
-                # open local (header modified) version
-                # fa_file  = open(files,'w')
-
-                # parse out header and seq
-                # fa_desc = raw_fa.split("\n")[0].replace(">","")
-                # ncbi_accession = fa_desc.split(" ",1)[0]
-                # fa_seq =    raw_fa.split("\n",1)[1]
-
-                # build ICTV-modified header
-                #  ACCESSION#VMR_SPECIES[#VMR_SEG] FAMILY TYPE VMR_ID ISOLATE_NAME 
-
-                # field_sep="#"
-                # field_sep="-"
-                # remove spaces and field separators
-                # species_name_cleaned = str(  species_name).replace(" ","_").replace("-","_")
-                # segment_cleaned =      str(       segment).replace(" ","_").replace("-","_")
-                # accession_cleaned =    str(ncbi_accession)
-                # if str(segment).lower() == "":
-                    # leave out #SEG
-                    # desc_line = '>'+field_sep.join([str(ncbi_accession),str(species_name.replace(" ","_"))])
-                    # desc_line = '>'+field_sep.join([species_name_cleaned,"",accession_cleaned])
-                # else:
-                    # include #SEG
-                #     desc_line = '>'+'#'.join([str(ncbi_accession),str(species_name.replace(" ","_")),str(segment)])
-                #     desc_line = '>'+field_sep.join([species_name_cleaned,segment_cleaned,accession_cleaned])
-                # # add comments to fasta header
-                # desc_line = ' '.join([desc_line,family_name,Isolate_type,Isolate_ID,virus_names])
-                # desc_line = ' '.join([desc_line,family_name,Isolate_type,virus_names])
-                
-                # if args.verbose: print("    ", desc_line)
-
-                # write ICTV formated header to fasta
-                # fa_file.write(desc_line+"\n"+fa_seq)
-                # fa_file.close()
-                # if args.verbose: print('    wrote: '+files)
-                
+                # Write to .faa
+                                sequence = feature.qualifiers["translation"][0]
+                                make_aa_file.write(f"{header}\n{sequence}\n")
+                               
+                        if args.verbose: print('    wrote: '+accession_aa_fasta)
+                else:
+                    if args.verbose: print("[FORMAT] SKIP/ERROR no sequence found in {accession_gb}".format(**locals()))
+                    bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
+                    continue
             count=count+1
 
     # output accession table, WITH fasta filenames
