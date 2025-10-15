@@ -18,6 +18,7 @@ import subprocess
 import numpy as np
 from typing import Dict, List
 from pathlib import Path
+import shlex
 from Bio import SeqIO, SeqRecord
 
 
@@ -77,7 +78,11 @@ class SearchResults():
    files: List[FileData]
    input_dir: str
    program_name: str
-   version: str         
+   version: str
+   task: str
+   max_target_seqs: int
+   max_hsps: int
+   blastasn_cmd: str
 
 # When this module is called from the command line, the settings are populated from command line arguments.
 @dataclass
@@ -90,6 +95,9 @@ class Settings():
    json_filename: str
    outdir: str
    verbose: bool
+   task: str
+   max_target_seqs: int
+   max_hsps: int
 
 
 #---------------------------------------------------------------------------------------------------
@@ -170,7 +178,64 @@ class SequenceFile():
 #---------------------------------------------------------------------------------------------------
 
 # Columns in the BLAST CSV file.
-CSV_COLUMNS = ["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"]
+BLAST_RESULT_COLUMNS = [
+   "qseqid",
+   "sseqid",
+   "pident",
+   "length",
+   "mismatch",
+   "gapopen",
+   "qstart",
+   "qend",
+   "sstart",
+   "send",
+   "evalue",
+   "bitscore"
+]
+
+CSV_METADATA_COLUMNS = [
+   "blastasn_cmd",
+   "taxablast_version",
+   "database_title"
+]
+
+CSV_COLUMNS = BLAST_RESULT_COLUMNS + CSV_METADATA_COLUMNS
+
+BLAST_TASK_PARAMETER_SETS = {
+   "blastn": [
+      ("-task", "blastn"),
+      ("-evalue", "0.05"),
+      ("-word_size", "11"),
+      ("-reward", "2"),
+      ("-penalty", "-3"),
+      ("-gapopen", "5"),
+      ("-gapextend", "2"),
+      ("-dust", "yes"),
+      ("-soft_masking", "true")
+   ],
+   "megablast": [
+      ("-task", "megablast"),
+      ("-evalue", "0.05"),
+      ("-word_size", "28"),
+      ("-reward", "1"),
+      ("-penalty", "-2"),
+      ("-gapopen", "0"),
+      ("-gapextend", "2"),
+      ("-dust", "yes"),
+      ("-soft_masking", "true")
+   ],
+   "dc-megablast": [
+      ("-task", "dc-megablast"),
+      ("-evalue", "0.05"),
+      ("-word_size", "11"),
+      ("-reward", "1"),
+      ("-penalty", "-2"),
+      ("-gapopen", "0"),
+      ("-gapextend", "2"),
+      ("-dust", "yes"),
+      ("-soft_masking", "true")
+   ]
+}
 
 # Valid extensions for input FASTA files.
 FASTA_FILE_EXTENSIONS = [".fa", ".fas", ".fasta", ".ffn", ".fna", ".frn", ".fsa", ".seq", ".txt"]
@@ -466,7 +531,11 @@ def main() -> None:
       files = [],
       input_dir = settings.indir,
       program_name = os.path.basename(sys.argv[0]),
-      version = ""
+      version = "",
+      task = settings.task,
+      max_target_seqs = settings.max_target_seqs,
+      max_hsps = settings.max_hsps,
+      blastasn_cmd = ""
    )
 
    try:
@@ -662,7 +731,9 @@ def process_fasta_file(sequence_file: SequenceFile):
 #---------------------------------------------------------------------------------------------------
 def run_blast(filename: str):
 
-   print(f"\nRunning blastn on {filename}")
+   global search_results
+
+   print(f"\nRunning blastn ({settings.task}) on {filename}")
    
    # Create file names/paths for the output files.
    blastasn_output_filepath = f"{settings.outdir}/{filename}.asn"
@@ -676,21 +747,27 @@ def run_blast(filename: str):
    fasta_path = f"{settings.indir}/{SEQUENCE_FILES_DIR}/{filename}"
 
    try:
-      blastasn_cmd = ["blastn", 
-	# match NCBI BLAST website "blastn" parameters
-        "-task", "blastn",
-	"-evalue", "0.05", 
-	"-word_size", "11", 
-	"-reward", "2", "-penalty", "-3", 
-	"-gapopen", "5", "-gapextend", "2", 
-	"-dust", "yes", "-soft_masking", "true", 
-	# local settings
-	"-db", settings.blastdb, 
-	"-query", fasta_path, 
-	"-out", blastasn_output_filepath, 
-	"-outfmt", "11"]
-      print("BLAST COMMAND:"+(" ".join(blastasn_cmd)))
-      
+      if settings.task not in BLAST_TASK_PARAMETER_SETS:
+         raise RuntimeError(f"Invalid BLAST task: {settings.task}")
+
+      task_parameters = BLAST_TASK_PARAMETER_SETS[settings.task]
+      blastasn_cmd: list[str] = ["blastn"]
+      for option, value in task_parameters:
+         blastasn_cmd.extend([option, value])
+
+      blastasn_cmd.extend([
+         "-max_target_seqs", str(settings.max_target_seqs),
+         "-max_hsps", str(settings.max_hsps),
+         "-db", settings.blastdb,
+         "-query", fasta_path,
+         "-out", blastasn_output_filepath,
+         "-outfmt", "11"
+      ])
+
+      command_str = " ".join(shlex.quote(arg) for arg in blastasn_cmd)
+      search_results.blastasn_cmd = command_str
+      print("BLAST COMMAND:" + command_str)
+
       # Run blastn on the FASTA file and generate an ASN file.
       subprocess.run(blastasn_cmd, capture_output=True, text=True, check=True)
 
@@ -708,7 +785,11 @@ def run_blast(filename: str):
 
       # Add a header row to the CSV file.
       df = pd.read_csv(blastcsv_output_filepath, header=None)
-      df.columns = CSV_COLUMNS
+      df.columns = BLAST_RESULT_COLUMNS
+      df[CSV_METADATA_COLUMNS[0]] = search_results.blastasn_cmd
+      df[CSV_METADATA_COLUMNS[1]] = search_results.version
+      df[CSV_METADATA_COLUMNS[2]] = search_results.database_title
+      df = df[CSV_COLUMNS]
       df.to_csv(blastcsv_output_filepath, index=False)
 
    except subprocess.CalledProcessError as e:
@@ -841,6 +922,9 @@ if __name__ == "__main__" :
    parser.add_argument('-db', help="BLAST database file", default="blast/ICTV_VMR_b")
    parser.add_argument('-decode', action='store_true', help="Decode the input filenames from base64URL encoding before serializing the search results")
    parser.add_argument('-info', action='store_true', help="Display BLAST database info")
+   parser.add_argument('-task', choices=list(BLAST_TASK_PARAMETER_SETS.keys()), default='blastn', help="BLASTN task to execute")
+   parser.add_argument('-max_target_seqs', type=int, default=50, help="Maximum number of aligned sequences to keep")
+   parser.add_argument('-max_hsps', type=int, default=25, help="Maximum number of HSPs per subject sequence")
 
    args = parser.parse_args()
 
@@ -848,6 +932,9 @@ if __name__ == "__main__" :
    print("OUT_DIR:", args.outdir)
    print("OUT_JSON:", args.json)
    print("OUT_HTML:", args.html, "\n")
+   print("TASK:", args.task)
+   print("MAX_TARGET_SEQS:", args.max_target_seqs)
+   print("MAX_HSPS:", args.max_hsps, "\n")
 
    # Ensure the output directory exists
    os.makedirs(args.outdir, exist_ok=True)
@@ -861,7 +948,10 @@ if __name__ == "__main__" :
       indir = args.indir,
       json_filename = args.json,
       outdir = args.outdir,
-      verbose = args.verbose
+      verbose = args.verbose,
+      task = args.task,
+      max_target_seqs = args.max_target_seqs,
+      max_hsps = args.max_hsps
    )
 
    # Call the main function to begin processing.
