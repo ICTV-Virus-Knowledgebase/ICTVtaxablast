@@ -1370,5 +1370,9 @@
     ],
     "input_dir": "test_data/regression",
     "program_name": "seqsearch",
-    "version": "VMR_MSL40.v1.20250307.6279b46"
+    "version": "VMR_MSL40.v1.20250307.d36849f",
+    "task": "blastn",
+    "max_target_seqs": 50,
+    "max_hsps": 25,
+    "blastasn_cmd": "blastn -task blastn -evalue 0.05 -word_size 11 -reward 2 -penalty -3 -gapopen 5 -gapextend 2 -dust yes -soft_masking true -max_target_seqs 50 -max_hsps 25 -db ./blast/ICTV_VMR_b -query test_data/regression/sequence_files/PP467602.fa -out test_out/regression/PP467602.fa.asn -outfmt 11"
 }
