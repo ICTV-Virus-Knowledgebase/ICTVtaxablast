@@ -287,6 +287,9 @@ parsed_data_df: pd.DataFrame
 # The search results that will be converted to a JSON output file.
 search_results: SearchResults
 
+# The base blastn command used for this run.
+blastasn_base_cmd: list[str] = []
+
 
 #---------------------------------------------------------------------------------------------------
 # Function definitions
@@ -522,6 +525,7 @@ def main() -> None:
 
    global parsed_data_df
    global search_results
+   global blastasn_base_cmd
 
    # Initialize the search results that will be serialized as a JSON output file.
    search_results = SearchResults(
@@ -542,6 +546,10 @@ def main() -> None:
       # Get the BLAST database title and git version.
       search_results.database_title = get_database_title()
       search_results.version = get_git_version()
+
+      # Build and store the base BLAST command for this run.
+      blastasn_base_cmd = build_blastasn_base_cmd()
+      search_results.blastasn_cmd = " ".join(shlex.quote(arg) for arg in blastasn_base_cmd)
 
       # parsed_data_df is df for the processed_accessions_b.tsv file
       parsed_data_df = pd.read_csv(PROCESSED_ACCESSIONS_FILENAME, sep="\t", header=0)
@@ -727,6 +735,29 @@ def process_fasta_file(sequence_file: SequenceFile):
 
 
 #---------------------------------------------------------------------------------------------------
+# Build the base blastn command for this run.
+#---------------------------------------------------------------------------------------------------
+def build_blastasn_base_cmd() -> list[str]:
+
+   if settings.task not in BLAST_TASK_PARAMETER_SETS:
+      raise RuntimeError(f"Invalid BLAST task: {settings.task}")
+
+   task_parameters = BLAST_TASK_PARAMETER_SETS[settings.task]
+   command: list[str] = ["blastn"]
+   for option, value in task_parameters:
+      command.extend([option, value])
+
+   command.extend([
+      "-max_target_seqs", str(settings.max_target_seqs),
+      "-max_hsps", str(settings.max_hsps),
+      "-db", settings.blastdb,
+      "-outfmt", "11"
+   ])
+
+   return command
+
+
+#---------------------------------------------------------------------------------------------------
 # Run blastn on a FASTA file and generate ASN, CSV, and HTML output files.
 #---------------------------------------------------------------------------------------------------
 def run_blast(filename: str):
@@ -746,26 +777,19 @@ def run_blast(filename: str):
    # The FASTA file's full path.
    fasta_path = f"{settings.indir}/{SEQUENCE_FILES_DIR}/{filename}"
 
+   command_str = ""
+
    try:
-      if settings.task not in BLAST_TASK_PARAMETER_SETS:
-         raise RuntimeError(f"Invalid BLAST task: {settings.task}")
+      if not blastasn_base_cmd:
+         raise RuntimeError("Base BLAST command has not been initialized")
 
-      task_parameters = BLAST_TASK_PARAMETER_SETS[settings.task]
-      blastasn_cmd: list[str] = ["blastn"]
-      for option, value in task_parameters:
-         blastasn_cmd.extend([option, value])
-
+      blastasn_cmd = blastasn_base_cmd.copy()
       blastasn_cmd.extend([
-         "-max_target_seqs", str(settings.max_target_seqs),
-         "-max_hsps", str(settings.max_hsps),
-         "-db", settings.blastdb,
          "-query", fasta_path,
-         "-out", blastasn_output_filepath,
-         "-outfmt", "11"
+         "-out", blastasn_output_filepath
       ])
 
       command_str = " ".join(shlex.quote(arg) for arg in blastasn_cmd)
-      search_results.blastasn_cmd = command_str
       print("BLAST COMMAND:" + command_str)
 
       # Run blastn on the FASTA file and generate an ASN file.
@@ -786,7 +810,7 @@ def run_blast(filename: str):
       # Add a header row to the CSV file.
       df = pd.read_csv(blastcsv_output_filepath, header=None)
       df.columns = BLAST_RESULT_COLUMNS
-      df[CSV_METADATA_COLUMNS[0]] = search_results.blastasn_cmd
+      df[CSV_METADATA_COLUMNS[0]] = command_str
       df[CSV_METADATA_COLUMNS[1]] = search_results.version
       df[CSV_METADATA_COLUMNS[2]] = search_results.database_title
       df = df[CSV_COLUMNS]
