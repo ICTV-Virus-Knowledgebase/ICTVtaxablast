@@ -448,14 +448,15 @@ def fetch_fasta(processed_accession_file_name):
                 gb_open = SeqIO.read(gb_open, "genbank")
                 if gb_open.seq:
                     make_nt_file= open(accession_nt_fasta,'w')
-                    if segment == "":
-                        segment = "--"
-                    else:
-                        segment= segment
                     
                     
-                    first_line= ([species_name,segment,accession_ID,family_name,Isolate_type,virus_names])
-                    first_line= str(first_line).replace("[","").replace("]","").replace("'","").replace(","," ")
+                    version = gb_open.annotations.get("sequence_version", "1")
+                    Beggining_firstline= ([species_name,"-",segment,"-",accession_ID,version,])
+                    End_firstline= ([family_name,Isolate_type,virus_names])
+                    Beggining_firstline= str(Beggining_firstline).replace("[","").replace("]","").replace("'","").replace(","," ")
+                    Beggining_firstline= re.sub(r"\s*-\s*", "-", re.sub(r"\s+"," ", Beggining_firstline)).replace(" ", "_", 1).replace(" ", ".")
+                    End_firstlineline= str(End_firstline).replace("[","").replace("]","").replace("'","").replace(","," ")
+                    first_line= Beggining_firstline+" "+End_firstlineline
 
 
                     make_nt_file.write(">"+first_line+"\n")
@@ -476,7 +477,9 @@ def fetch_fasta(processed_accession_file_name):
                 # Build FASTA header
                                 protein_id = feature.qualifiers.get("protein_id", ["unknown_protein"])[0]
                                 gene_name = feature.qualifiers.get("gene", ["unknown_gene"])[0]
-                                header = f">{protein_id} {gene_name}"
+                                product_name = feature.qualifiers.get("product", ["unknown_product"])[0]
+                                CDS= feature.qualifiers.get("locus_tag", ["unknown_CDS"])[0]
+                                header = f">{protein_id} {gene_name} {product_name} {CDS}"
 
                 # Write to .faa
                                 sequence = feature.qualifiers["translation"][0]
