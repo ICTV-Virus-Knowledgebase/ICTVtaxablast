@@ -449,19 +449,21 @@ def fetch_fasta(processed_accession_file_name):
                 if gb_open.seq:
                     make_nt_file= open(accession_nt_fasta,'w')
                     
-                    
+                    # Build FASTA header
                     version = gb_open.annotations.get("sequence_version", "1")
                     Beggining_firstline= ([species_name,"-",segment,"-",accession_ID,version,])
                     End_firstline= ([family_name,Isolate_type,virus_names])
                     Beggining_firstline= str(Beggining_firstline).replace("[","").replace("]","").replace("'","").replace(","," ")
                     Beggining_firstline= re.sub(r"\s*-\s*", "-", re.sub(r"\s+"," ", Beggining_firstline)).replace(" ", "_", 1).replace(" ", ".")
+                    #end first line only needed commas and brackets replaced with spaces.
                     End_firstlineline= str(End_firstline).replace("[","").replace("]","").replace("'","").replace(","," ")
                     first_line= Beggining_firstline+" "+End_firstlineline
 
-
+                    #first line of .fna file
                     make_nt_file.write(">"+first_line+"\n")
 
 
+                    # sequence line of .fna file in fasta format
                     make_nt_file.write("{gb_open.seq}\n".format(**locals()))
                     make_nt_file.close()
                     if args.verbose: print('    wrote: '+accession_nt_fasta)
@@ -478,9 +480,14 @@ def fetch_fasta(processed_accession_file_name):
                                 protein_id = feature.qualifiers.get("protein_id", ["unknown_protein"])[0]
                                 gene_name = feature.qualifiers.get("gene", ["unknown_gene"])[0]
                                 product_name = feature.qualifiers.get("product", ["unknown_product"])[0]
-                                CDS= feature.qualifiers.get("locus_tag", ["unknown_CDS"])[0]
-                                header = f">{protein_id} {gene_name} {product_name} {CDS}"
-
+                                
+                                header = f">{Beggining_firstline} {protein_id} {End_firstline} {product_name}"
+                                # Remove brackets and quotes from End_firstline if it's a list
+                                if isinstance(End_firstline, list):
+                                    End_firstline_str = " ".join(str(x) for x in End_firstline)
+                                else:
+                                    End_firstline_str = str(End_firstline)
+                                header = f">{Beggining_firstline} {protein_id} {End_firstline_str} product={product_name}"
                 # Write to .faa
                                 sequence = feature.qualifiers["translation"][0]
                                 make_aa_file.write(f"{header}\n{sequence}\n")
