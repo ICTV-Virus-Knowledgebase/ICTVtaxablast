@@ -473,26 +473,42 @@ def fetch_fasta(processed_accession_file_name):
                         continue
 
                     with open(accession_aa_fasta, "w") as make_aa_file:
-                        
+                        protein_check = set()
                         for feature in gb_open.features:
                             if feature.type == "CDS" and "translation" in feature.qualifiers:
                 # Build FASTA header
                                 protein_id = feature.qualifiers.get("protein_id", ["unknown_protein"])[0]
-                                gene_name = feature.qualifiers.get("gene", ["unknown_gene"])[0]
-                                product_name = feature.qualifiers.get("product", ["unknown_product"])[0]
                                 
-                                header = f">{Beggining_firstline} {protein_id} {End_firstline} {product_name}"
+                                product_name = feature.qualifiers.get("product", ["unknown_product"])[0]
+                                protein_count= feature.qualifiers["translation"][0].strip()
+                                if protein_count:
+                                    protein_check.add(protein_count)
+
+
+                                
+                                header = f">{Beggining_firstline} {protein_id} {End_firstline} {product_name} "
                                 # Remove brackets and quotes from End_firstline if it's a list
                                 if isinstance(End_firstline, list):
                                     End_firstline_str = " ".join(str(x) for x in End_firstline)
                                 else:
                                     End_firstline_str = str(End_firstline)
-                                header = f">{Beggining_firstline} {protein_id} {End_firstline_str} product={product_name}"
+                                header = f">{Beggining_firstline} {protein_id} {End_firstline_str} product={product_name} "
                 # Write to .faa
                                 sequence = feature.qualifiers["translation"][0]
+                                protein_tuple = (sequence)
+                                seq_in_protein= len(protein_tuple)
+                                seq_in_nt= len(gb_open.seq)
+                                seq_test= seq_in_nt/3
+                                if seq_test == seq_in_protein:
+                                    print(" Nucleotide length is /3 of protein length. Good.")
+                                else:
+                                    print("Nucleotide:" +str(seq_test)+ " Protein:"+str(seq_in_protein)+" lengths do not match!",file=sys.stderr)
+
+                                
+                                
                                 make_aa_file.write(f"{header}\n{sequence}\n")
                                
-                        if args.verbose: print('    wrote: '+accession_aa_fasta)
+                        if args.verbose: print('    wrote: '+accession_aa_fasta, " with ", len(protein_check), " proteins sets in file and ")
                 else:
                     if args.verbose: print("[FORMAT] SKIP/ERROR no sequence found in {accession_gb}".format(**locals()))
                     bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
