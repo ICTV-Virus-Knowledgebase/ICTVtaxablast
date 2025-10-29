@@ -391,6 +391,7 @@ def fetch_fasta(processed_accession_file_name):
             accession_gb = genus_dir+"/"+str(accession_ID)+".gb"
             accession_aa_fasta = genus_dir+"/"+str(accession_ID)+".faa"
             accession_nt_fasta = genus_dir+"/"+str(accession_ID)+".fna"
+            # bad_protein_len= accession_aa_fasta+"/"+"Protein_length_mismatch.txt"
             
 
             
@@ -493,22 +494,23 @@ def fetch_fasta(processed_accession_file_name):
                                 else:
                                     End_firstline_str = str(End_firstline)
                                 header = f">{Beggining_firstline} {protein_id} {End_firstline_str} product={product_name} "
-                # Write to .faa
+                                # make_bad_protein_len= open(bad_protein_len,'w')
                                 sequence = feature.qualifiers["translation"][0]
                                 protein_tuple = (sequence)
                                 seq_in_protein= len(protein_tuple)
-                                seq_in_nt= len(gb_open.seq)
+                                #CDS number of nucleotides check
+                                seq_in_nt= len(feature.location)
                                 seq_test= seq_in_nt/3
                                 if seq_test == seq_in_protein:
                                     print(" Nucleotide length is /3 of protein length. Good.")
                                 else:
-                                    print("Nucleotide:" +str(seq_test)+ " Protein:"+str(seq_in_protein)+" lengths do not match!",file=sys.stderr)
+                                    print("Nucleotide:" +str(seq_test)+ " Protein:"+str(seq_in_protein)+" lengths do not match!")
 
                                 
-                                
+                                # Write to .faa
                                 make_aa_file.write(f"{header}\n{sequence}\n")
                                
-                        if args.verbose: print('    wrote: '+accession_aa_fasta, " with ", len(protein_check), " proteins sets in file and ")
+                        if args.verbose: print('    wrote: '+accession_aa_fasta, " with ", len(protein_check), " CDS records")
                 else:
                     if args.verbose: print("[FORMAT] SKIP/ERROR no sequence found in {accession_gb}".format(**locals()))
                     bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
