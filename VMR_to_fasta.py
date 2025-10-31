@@ -391,7 +391,8 @@ def fetch_fasta(processed_accession_file_name):
             accession_gb = genus_dir+"/"+str(accession_ID)+".gb"
             accession_aa_fasta = genus_dir+"/"+str(accession_ID)+".faa"
             accession_nt_fasta = genus_dir+"/"+str(accession_ID)+".fna"
-            # bad_protein_len= accession_aa_fasta+"/"+"Protein_length_mismatch.txt"
+
+            bad_protein_len= genus_dir+"/"+str(accession_ID)+"_bad_protein_length.tsv"
             
 
             
@@ -494,18 +495,23 @@ def fetch_fasta(processed_accession_file_name):
                                 else:
                                     End_firstline_str = str(End_firstline)
                                 header = f">{Beggining_firstline} {protein_id} {End_firstline_str} product={product_name} "
-                                # make_bad_protein_len= open(bad_protein_len,'w')
+                                make_bad_protein_len= open(bad_protein_len,'w', newline="")
+
                                 sequence = feature.qualifiers["translation"][0]
                                 protein_tuple = (sequence)
                                 seq_in_protein= len(protein_tuple)
                                 #CDS number of nucleotides check
                                 seq_in_nt= len(feature.location)
                                 seq_test= seq_in_nt/3
-                                if seq_test == seq_in_protein:
-                                    print(" Nucleotide length is /3 of protein length. Good.")
+                                len_report_df= pd.DataFrame(columns=["Accession_ID",'Nucleotide_length','Protein_length','Match', "Protein_id"])
+                                if seq_test != seq_in_protein:
+                                    len_match= "NO"
                                 else:
-                                    print("Nucleotide:" +str(seq_test)+ " Protein:"+str(seq_in_protein)+" lengths do not match!")
-
+                                    len_match= "YES"
+                                len_report_rows= pd.DataFrame([[accession_ID,seq_in_nt,seq_in_protein,len_match, protein_id]])
+                                pd.DataFrame.to_csv(len_report_rows,make_bad_protein_len,sep='\t',index=False,header=len_report_df.columns)
+                                make_bad_protein_len.close()   
+                               
                                 
                                 # Write to .faa
                                 make_aa_file.write(f"{header}\n{sequence}\n")
