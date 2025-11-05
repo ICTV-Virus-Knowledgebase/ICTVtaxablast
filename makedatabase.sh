@@ -36,44 +36,48 @@ if [ ! -e "$ACCESSION_TSV" ]; then
     exit 1
 fi
 
-ALL_FASTA=./fasta_new_vmr_$EA.fna
-SRC_DIR=$(dirname $ALL_FASTA)
+NUC_ALL_FASTA=./fasta_new_vmr_$EA.fna
+NUC_SRC_DIR=$(dirname $NUC_ALL_FASTA)
+PROT_ALL_FASTA=./fasta_new_vmr_$EA.faa
+PROT_SRC_DIR=$(dirname $PROT_ALL_FASTA)
 BLAST_NUC_DB=./blast/ICTV_VMR_${EA}_nuc
 BLAST_PROT_DB=./blast/ICTV_VMR_${EA}_prot
-FIRST_NUC_FASTA=$(awk 'BEGIN{FS="\t";GENUS=25;ACC=6}(NR>1){print $GENUS"/"$ACC".fna"}' $ACCESSION_TSV|head -1)
-OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=25;ACC=6}(NR>1){print $GENUS"/"$ACC}' $ACCESSION_TSV|head -1)
-FIRST_PROT_FASTA=$(awk 'BEGIN{FS="\t";GENUS=25;ACC=6}(NR>1){print $GENUS"/"$ACC".faa"}' $ACCESSION_TSV|head -1)
+FIRST_NUC_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $GENUS"/"$ACC".fna"}' $ACCESSION_TSV|head -1)
+OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $GENUS"/"$ACC}' $ACCESSION_TSV|head -1)
+FIRST_PROT_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $GENUS"/"$ACC".faa"}' $ACCESSION_TSV|head -1)
 
 
 
 
 
 ACCESSION_COUNT=$(tail -n +2 $ACCESSION_TSV |wc -l)
+# Concatenate all formatted FASTA files into a single file for BLAST database creation.
+# Both nucleotide (column 32) and protein (column 31) FASTA files are included to ensure all relevant sequences are present.
 echo "# concatenate all $ACCESSION_COUNT formatted fastas"
-echo "cut -f 33 $ACCESSION_TSV | tail -n +2 | xargs cat > $ALL_FASTA"
-echo "cut -f 32 $ACCESSION_TSV | tail -n +2 | xargs cat > $ALL_FASTA"
-cut -f 33 $ACCESSION_TSV | tail -n +2 | xargs cat > $ALL_FASTA
-cut -f 32 $ACCESSION_TSV | tail -n +2 | xargs cat > $ALL_FASTA
-ls -lsh $ALL_FASTA
-
+echo "cut -f 32 $ACCESSION_TSV | tail -n +2 | xargs cat > $NUC_ALL_FASTA"
+echo "cut -f 31 $ACCESSION_TSV | tail -n +2 | xargs cat > $PROT_ALL_FASTA"
+cut -f 32 $ACCESSION_TSV | tail -n +2 | xargs cat > $NUC_ALL_FASTA
+cut -f 31 $ACCESSION_TSV | tail -n +2 | xargs cat > $PROT_ALL_FASTA
+ls -lsh $NUC_ALL_FASTA
+ls -lsh $PROT_ALL_FASTA
 echo "# Make the BLAST database"
 if [ "$(which makeblastdb 2>/dev/null)" == "" ]; then 
     echo "module load BLAST"
     module load BLAST
 fi
 
-echo 'makeblastdb -in $ALL_FASTA -input_type "fasta" -title "ICTV VMR_MSL40.v1.20250307 ($EA)" -out "$BLAST_NUC_DB" -dbtype "nucl"'
-makeblastdb -in $ALL_FASTA -input_type "fasta" -title "ICTV VMR_MSL40.v1.20250307 ($EA)" -out "$BLAST_NUC_DB" -dbtype "nucl"
-echo 'makeblastdb -in $ALL_FASTA -input_type "fasta" -title "ICTV VMR_MSL40.v1.20250307 ($EA)" -out "$BLAST_PROT_DB" -dbtype "prot"'
-makeblastdb -in $ALL_FASTA -input_type "fasta" -title "ICTV VMR_MSL40.v1.20250307 ($EA)" -out "$BLAST_PROT_DB" -dbtype "prot"
+echo 'makeblastdb -in $NUC_ALL_FASTA -input_type "fasta" -title "ICTV VMR_MSL40.v1.20250307 ($EA)" -out "$BLAST_NUC_DB" -dbtype "nucl"'
+makeblastdb -in $NUC_ALL_FASTA -input_type "fasta" -title "ICTV VMR_MSL40.v1.20250307 ($EA)" -out "$BLAST_NUC_DB" -dbtype "nucl"
+echo 'makeblastdb -in $PROT_ALL_FASTA -input_type "fasta" -title "ICTV VMR_MSL40.v1.20250307 ($EA)" -out "$BLAST_PROT_DB" -dbtype "prot"'
+makeblastdb -in $PROT_ALL_FASTA -input_type "fasta" -title "ICTV VMR_MSL40.v1.20250307 ($EA)" -out "$BLAST_PROT_DB" -dbtype "prot"
 
 echo "# Example usage:"
 echo "# mkdir -p ./results/$EA/$(dirname $OUT_FILEPATH)"
 echo "# CSV output"
-echo "# blastn -db $BLAST_NUC_DB -query ./$NUC_SRC_DIR/$FIRST_NUC_FASTA -out ./results/$EA/${OUT_FILEPATH}.csv -outfmt '7 delim=,'"
-echo "# blastp -db $BLAST_PROT_DB -query ./$PROT_SRC_DIR/$FIRST_PROT_FASTA -out ./results/$EA/${OUT_FILEPATH}.csv -outfmt '7 delim=,'"
+echo "# blastn -db $BLAST_NUC_DB -query $NUC_SRC_DIR/$FIRST_NUC_FASTA -out ./results/$EA/${OUT_FILEPATH}.csv -outfmt '7 delim=,'"
+echo "# blastp -db $BLAST_PROT_DB -query $PROT_SRC_DIR/$FIRST_PROT_FASTA -out ./results/$EA/${OUT_FILEPATH}.csv -outfmt '7 delim=,'"
 echo "# HTML output"
-echo "# blastn -db $BLAST_NUC_DB -query ./$SRC_DIR/$FIRST_NUC_FASTA -out ./results/$EA/${OUT_FILEPATH}.asn -outfmt '11'"
-echo "# blastp -db $BLAST_PROT_DB -query ./$SRC_DIR/$FIRST_PROT_FASTA -out ./results/$EA/${OUT_FILEPATH}.asn -outfmt '11'"
+echo "# blastn -db $BLAST_NUC_DB -query $NUC_SRC_DIR/$FIRST_NUC_FASTA -out ./results/$EA/${OUT_FILEPATH}.asn -outfmt '11'"
+echo "# blastp -db $BLAST_PROT_DB -query $PROT_SRC_DIR/$FIRST_PROT_FASTA -out ./results/$EA/${OUT_FILEPATH}.asn -outfmt '11'"
 echo "# blast_formatter -archive ./results/$EA/${OUT_FILEPATH}.asn -out ./results/$EA/${OUT_FILEPATH}.html -html"
 
