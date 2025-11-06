@@ -674,6 +674,20 @@ def process_fasta_file(sequence_file: SequenceFile):
       merge_missing = merge_dfs["Species"].isna().sum()
       if merge_missing > 0:
 
+         # dump ofending data frames
+         tsv_name= "debug.df.tsv"
+         print(f"## INTERNAL ERROR: row mismatch: {tsv_name}, will have {len(df)} lines")
+         df.to_csv(tsv_name, sep="\t", index=False)
+         print(f"## DEBUG: {tsv_name}, wrote {len(df)} lines")
+
+         tsv_name= "debug.parsed_data_df.tsv"
+         parsed_data_df.to_csv(tsv_name, sep="\t", index=False)
+         print(f"## DEBUG: {tsv_name}, {len(parsed_data_df)} lines")
+
+         tsv_name= "debug.merge_dfs.tsv"
+         merge_dfs.to_csv("debug.merge_dfs.tsv", sep="\t", index=False)
+         print(f"## DEBUG: {tsv_name}, {len(merge_dfs)} lines")
+
          # Generate an error message and print it.
          error_message = f"INTERNAL ERROR: {merge_missing} out of {len(df)} sseqid.base_accession's didn't match to processed_accessions table. Check if your blastdb and processed_accesions table are out of sync."
          logging.error(error_message)
@@ -681,14 +695,53 @@ def process_fasta_file(sequence_file: SequenceFile):
          # Update the input file's errors.
          input_file_data.errors.append(error_message)
 
+
+         return
+
+      # check for new rows
       if len(df) < len(merge_dfs):
 
-         error_message = "INTERNAL ERROR: merging blast results to processed_accessions added extra rows. Check if your blastdb and processed_accesions table are out of sync."
+         print(f"## INTERNAL ERROR: row mismatch: {len(df)} < {len(merge_dfs)}")
+
+         # dump data frames
+         tsv_name= "debug.df.tsv"
+         print(f"## INTERNAL ERROR: row mismatch: {tsv_name}, will have {len(df)} lines")
+         df.to_csv(tsv_name, sep="\t", index=False)
+         print(f"## DEBUG: {tsv_name}, wrote {len(df)} lines")
+
+         tsv_name= "debug.parsed_data_df.tsv"
+         parsed_data_df.to_csv(tsv_name, sep="\t", index=False)
+         print(f"## DEBUG: {tsv_name}, {len(parsed_data_df)} lines")
+
+         tsv_name= "debug.merge_dfs.tsv"
+         merge_dfs.to_csv("debug.merge_dfs.tsv", sep="\t", index=False)
+         print(f"## DEBUG: {tsv_name}, {len(merge_dfs)} lines")
+
+         # find offending data
+         # counts in original and merged
+         c_df     = df["sBaseAccession"].dropna().value_counts()
+         c_merged = merge_dfs["sBaseAccession"].dropna().value_counts()
+
+         # accessions with different row counts post-merge than pre-merge
+         #changed_accessions = sorted([acc for acc, n in c_merged.items() if n !=  c_df.get(acc, 0)])
+         df_map     = dict(c_df)        # index -> count
+         merged_map = dict(c_merged)    # index -> count
+         changed_accessions = sorted(
+                [("+" if merged_map.get(acc,0) > df_map.get(acc,0) else "-") + acc
+                 for acc in set(merged_map) | set(df_map)
+                 if merged_map.get(acc,0) != df_map.get(acc,0)]
+         )
+         print("changed_accessions:")
+         print(changed_accessions)
+         problem_accessions_str = ", ".join(changed_accessions)
+
+         error_message = f"INTERNAL ERROR: merging blast results to processed_accessions added extra rows. Check if your blastdb and processed_accesions table are out of sync. len(df) = {len(df)}; len(merge_dfs)={len(merge_dfs)}: offending accessions: {problem_accessions_str}"
          logging.error(error_message)
 
          # Update the input file's errors and add it back to the file data lookup.
          input_file_data.errors.append(error_message)
          file_data_lookup[input_filename] = input_file_data
+
          return
 
       # TODO: How does status get populated???
