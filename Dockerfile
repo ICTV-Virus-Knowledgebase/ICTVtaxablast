@@ -72,8 +72,8 @@ COPY processed_accessions_b.fa_names.tsv ./
 # 
 # test data
 #
-COPY test_data/one_seq/ ./test_data/one_seq/
-COPY test_out/one_seq/ ./test_out/one_seq/
+COPY test_data/regression/ ./test_data/regression/
+COPY test_out/regression/ ./test_out/regression/
 
 # what does ENTRYPOINT do exactly?
 # ENTRYPOINT fixed the base command; immutable
