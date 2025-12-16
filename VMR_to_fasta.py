@@ -31,7 +31,6 @@ import re
 import sys
 import os
 import pathlib # for stem=basename(.txt)
-from Bio import SeqIO
 
 # Class needed to load args from files. 
 class LoadFromFile (argparse.Action):
@@ -375,9 +374,7 @@ def fetch_fasta(processed_accession_file_name):
             genus_name   = row.iloc[24]
             species_name = row.iloc[26]
             virus_names  = row.iloc[27]
-            if args.verbose:
-                # count+=1
-                print("Fetch [",count,"] ID:",Isolate_ID," Species:",species_name," Segment:",segment," Accession:",accession_ID)
+            if args.verbose: print("Fetch [",count,"] ID:",Isolate_ID," Species:",species_name," Segment:",segment," Accession:",accession_ID)
 
             # emtpy cell becomes float:NaN!
             if segment != segment:         segment = ""
@@ -418,11 +415,7 @@ def fetch_fasta(processed_accession_file_name):
                 if args.verbose: print("[FETCH]  EXEC NCBI fetch for {accession_gb}".format(**locals()))
                 try:
                     # fetch FASTA from NCBI
-                    
-                    handle = Entrez.efetch(db="nuccore", id=accession_ID, rettype="gb", retmode="text")
-
-                    
-                    
+                    handle = Entrez.efetch(db="nuccore", id=accession_ID, rettype="fasta", retmode="text")
 
                     # limit requests: 3/second with email, 10/second with API_KEY
                     time.sleep(entrez_sleep)
@@ -432,7 +425,7 @@ def fetch_fasta(processed_accession_file_name):
 
                     # prints out accession that got though cleaning
                     raw_fa = handle.read()
-                    raw_file.write(raw_fa)
+                    raw_file.write(raw_fa);
                     raw_file.close()
                     if args.verbose: print('    wrote: '+accession_gb)
 
