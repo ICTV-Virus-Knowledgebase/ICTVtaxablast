@@ -1,0 +1,13 @@
+# BLASTN 2.16.0+
+# Query: AY954969.1#Kayvirus_G1 AY954969.1 Staphylococcus phage G1, complete genome
+# Database: ./blast/ICTV_VMR_b
+# Fields: query acc.ver, subject acc.ver, % identity, alignment length, mismatches, gap opens, q. start, q. end, s. start, s. end, evalue, bit score
+# 7 hits found
+AY954969.1#Kayvirus_G1,AY954969.1#Kayvirus_G1,100.000,138715,0,0,1,138715,1,138715,0.0,2.562e+05
+AY954969.1#Kayvirus_G1,AY954969.1#Kayvirus_G1,95.783,498,12,9,135784,136276,135594,136087,0.0,795
+AY954969.1#Kayvirus_G1,AY954969.1#Kayvirus_G1,95.783,498,12,9,135594,136087,135784,136276,0.0,795
+AY954969.1#Kayvirus_G1,AY954969.1#Kayvirus_G1,92.208,308,15,9,135974,136276,135594,135897,4.96e-118,427
+AY954969.1#Kayvirus_G1,AY954969.1#Kayvirus_G1,92.208,308,15,9,135594,135897,135974,136276,4.96e-118,427
+AY954969.1#Kayvirus_G1,AY954969.1#Kayvirus_G1,82.203,118,12,9,136164,136276,135594,135707,2.06e-17,93.5
+AY954969.1#Kayvirus_G1,AY954969.1#Kayvirus_G1,82.203,118,12,9,135594,135707,136164,136276,2.06e-17,93.5
+# BLAST processed 1 queries

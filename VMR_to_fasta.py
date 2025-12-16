@@ -21,6 +21,7 @@ def formatElapsedTime():
     return f"[{hours:02d}h{minutes:02d}m{seconds:02d}s]"
 
 print("# {0} Importing python packages: please wait...".format(formatElapsedTime()))
+# from networkx import is_path
 import pandas as pd
 import subprocess
 from urllib import error
@@ -387,12 +388,20 @@ def fetch_fasta(processed_accession_file_name):
             genus_dir = args.fasta_dir+"/"+str(genus_name)
             if genus_name == "":
                 genus_dir = args.fasta_dir+"/"+"no_genus"
-            accession_raw_file_name = genus_dir+"/"+str(accession_ID)+".raw"
-            accession_fa_file_name = genus_dir+"/"+str(accession_ID)+".fa"
+            accession_gb = genus_dir+"/"+str(accession_ID)+".gb"
+            accession_aa_fasta = genus_dir+"/"+str(accession_ID)+".faa"
+            accession_nt_fasta = genus_dir+"/"+str(accession_ID)+".fna"
+
+            bad_protein_len= genus_dir+"/"+str(accession_ID)+"_bad_protein_length.tsv"
+            
+
             
             # Assign the computed values to the new columns
-            Accessions.loc[count, "accession_raw_file_name"] = accession_raw_file_name
-            Accessions.loc[count, "accession_fa_file_name"] = accession_fa_file_name
+            Accessions.loc[count, "accession_gb"] = accession_gb
+            Accessions.loc[count, "accession_aa_fasta"] = accession_aa_fasta
+            Accessions.loc[count, "accession_nt_fasta"] = accession_nt_fasta
+            
+            
     
             # make sure dir exists
             if not os.path.exists(genus_dir):
@@ -401,11 +410,12 @@ def fetch_fasta(processed_accession_file_name):
                 if args.verbose: print(f"Directory '{genus_dir}' created successfully.")
     
             # check if the raw file exists
-            if os.path.exists(accession_raw_file_name):
-                if args.verbose: print("[FETCH]  SKIP NCBI fetch for {accession_raw_file_name}".format(**locals()))
+            if os.path.exists(accession_gb):
+                if args.verbose: print("[FETCH]  SKIP NCBI fetch for {accession_gb}".format(**locals()))
             else:
-                raw_file = open(accession_raw_file_name,'w')
-                if args.verbose: print("[FETCH]  EXEC NCBI fetch for {accession_raw_file_name}".format(**locals()))
+                raw_file = open(accession_gb,'w')
+                
+                if args.verbose: print("[FETCH]  EXEC NCBI fetch for {accession_gb}".format(**locals()))
                 try:
                     # fetch FASTA from NCBI
                     
@@ -424,61 +434,95 @@ def fetch_fasta(processed_accession_file_name):
                     raw_fa = handle.read()
                     raw_file.write(raw_fa)
                     raw_file.close()
-                    if args.verbose: print('    wrote: '+accession_raw_file_name)
+                    if args.verbose: print('    wrote: '+accession_gb)
 
                 except:
                     print("    [ERR] Accession ID "+"'"+str(accession_ID)+"'"+" Entrez.efetch threw an error",file=sys.stderr)
                     bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
 
             # check if processed fasta is out of date
-            if os.path.getsize(accession_raw_file_name) == 0:
-                if args.verbose: print("[FORMAT] SKIP/ERROR raw files is empty for {accession_fa_file_name}".format(**locals()))
-            elif os.path.exists(accession_fa_file_name) and os.path.getmtime(accession_fa_file_name) > os.path.getmtime(accession_raw_file_name):
-                if args.verbose: print("[FORMAT] SKIP reformat header for {accession_fa_file_name}".format(**locals()))
+            
+            if os.path.getsize(accession_gb) == 0:
+                        if args.verbose: print("[FORMAT] SKIP/ERROR complete record files is empty for {accession_gb}".format(**locals()))
             else:
-                if args.verbose: print("[FORMAT] EXEC reformat header for {accession_fa_file_name}".format(**locals()))
                 
-                # open local raw genbank fasta
-                raw_file = open(accession_raw_file_name,'r')
-                raw_fa = raw_file.read()
-                raw_file.close()
+                # open genbank file
+                gb_open = open(accession_gb,"r")
+                #read using SeqIO
+                gb_open = SeqIO.read(gb_open, "genbank")
+                if gb_open.seq:
+                    make_nt_file= open(accession_nt_fasta,'w')
+                    
+                    # Build FASTA header
+                    version = gb_open.annotations.get("sequence_version", "1")
+                    Beggining_firstline= ([species_name,"-",segment,"-",accession_ID,version,])
+                    End_firstline= ([family_name,Isolate_type,virus_names])
+                    Beggining_firstline= str(Beggining_firstline).replace("[","").replace("]","").replace("'","").replace(","," ")
+                    Beggining_firstline= re.sub(r"\s*-\s*", "-", re.sub(r"\s+"," ", Beggining_firstline)).replace(" ", "_", 1).replace(" ", ".")
+                    #end first line only needed commas and brackets replaced with spaces.
+                    End_firstlineline= str(End_firstline).replace("[","").replace("]","").replace("'","").replace(","," ")
+                    first_line= Beggining_firstline+" "+End_firstlineline
 
-                # open local (header modified) version
-                fa_file  = open(accession_fa_file_name,'w')
+                    #first line of .fna file
+                    make_nt_file.write(">"+first_line+"\n")
 
-                # parse out header and seq
-                fa_desc = raw_fa.split("\n")[0].replace(">","")
-                ncbi_accession = fa_desc.split(" ",1)[0]
-                fa_seq =    raw_fa.split("\n",1)[1]
 
-                # build ICTV-modified header
-                #  ACCESSION#VMR_SPECIES[#VMR_SEG] FAMILY TYPE VMR_ID ISOLATE_NAME 
+                    # sequence line of .fna file in fasta format
+                    make_nt_file.write("{gb_open.seq}\n".format(**locals()))
+                    make_nt_file.close()
+                    if args.verbose: print('    wrote: '+accession_nt_fasta)
+                    else:
+                        if args.verbose: print("[FORMAT] SKIP/ERROR no sequence found in {accession_gb}".format(**locals()))
+                        bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
+                        continue
 
-                #field_sep="#"
-                field_sep="-"
-                # remove spaces and field separators
-                species_name_cleaned = str(  species_name).replace(" ","_").replace("-","_")
-                segment_cleaned =      str(       segment).replace(" ","_").replace("-","_")
-                accession_cleaned =    str(ncbi_accession)
-                if str(segment).lower() == "":
-                    # leave out #SEG
-                    #desc_line = '>'+field_sep.join([str(ncbi_accession),str(species_name.replace(" ","_"))])
-                    desc_line = '>'+field_sep.join([species_name_cleaned,"",accession_cleaned])
+                    with open(accession_aa_fasta, "w") as make_aa_file:
+                        protein_check = set()
+                        for feature in gb_open.features:
+                            if feature.type == "CDS" and "translation" in feature.qualifiers:
+                # Build FASTA header
+                                protein_id = feature.qualifiers.get("protein_id", ["unknown_protein"])[0]
+                                
+                                product_name = feature.qualifiers.get("product", ["unknown_product"])[0]
+                                protein_count= feature.qualifiers["translation"][0].strip()
+                                if protein_count:
+                                    protein_check.add(protein_count)
+
+
+                                
+                                header = f">{Beggining_firstline} {protein_id} {End_firstline} {product_name} "
+                                # Remove brackets and quotes from End_firstline if it's a list
+                                if isinstance(End_firstline, list):
+                                    End_firstline_str = " ".join(str(x) for x in End_firstline)
+                                else:
+                                    End_firstline_str = str(End_firstline)
+                                header = f">{Beggining_firstline} {protein_id} {End_firstline_str} product={product_name} "
+                                make_bad_protein_len= open(bad_protein_len,'w', newline="")
+
+                                sequence = feature.qualifiers["translation"][0]
+                                protein_tuple = (sequence)
+                                seq_in_protein= len(protein_tuple)
+                                #CDS number of nucleotides check
+                                seq_in_nt= len(feature.location)
+                                seq_test= seq_in_nt/3
+                                len_report_df= pd.DataFrame(columns=["Accession_ID",'Nucleotide_length','Protein_length','Match', "Protein_id"])
+                                if seq_test != seq_in_protein:
+                                    len_match= "NO"
+                                else:
+                                    len_match= "YES"
+                                len_report_rows= pd.DataFrame([[accession_ID,seq_in_nt,seq_in_protein,len_match, protein_id]])
+                                pd.DataFrame.to_csv(len_report_rows,make_bad_protein_len,sep='\t',index=False,header=len_report_df.columns)
+                                make_bad_protein_len.close()   
+                               
+                                
+                                # Write to .faa
+                                make_aa_file.write(f"{header}\n{sequence}\n")
+                               
+                        if args.verbose: print('    wrote: '+accession_aa_fasta, " with ", len(protein_check), " CDS records")
                 else:
-                    # include #SEG
-                    #desc_line = '>'+'#'.join([str(ncbi_accession),str(species_name.replace(" ","_")),str(segment)])
-                    desc_line = '>'+field_sep.join([species_name_cleaned,segment_cleaned,accession_cleaned])
-                # add comments to fasta header
-                #desc_line = ' '.join([desc_line,family_name,Isolate_type,Isolate_ID,virus_names])
-                desc_line = ' '.join([desc_line,family_name,Isolate_type,virus_names])
-                
-                if args.verbose: print("    ", desc_line)
-
-                # write ICTV formated header to fasta
-                fa_file.write(desc_line+"\n"+fa_seq)
-                fa_file.close()
-                if args.verbose: print('    wrote: '+accession_fa_file_name)
-                
+                    if args.verbose: print("[FORMAT] SKIP/ERROR no sequence found in {accession_gb}".format(**locals()))
+                    bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
+                    continue
             count=count+1
 
     # output accession table, WITH fasta filenames

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import os, pandas as pd, glob
 import pandas.io.common
 
@@ -6,7 +5,7 @@ import pandas.io.common
 
 
 
-path = "test_out/regression"
+path = "test_out/one_seq"
 files_list = glob.glob(os.path.join(path, "*.fa.csv"))
 
 for file in files_list:
