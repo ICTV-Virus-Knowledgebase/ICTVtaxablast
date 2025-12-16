@@ -31,6 +31,7 @@ import re
 import sys
 import os
 import pathlib # for stem=basename(.txt)
+from Bio import SeqIO
 
 # Class needed to load args from files. 
 class LoadFromFile (argparse.Action):
