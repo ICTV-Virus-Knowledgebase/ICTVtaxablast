@@ -36,11 +36,17 @@ if [ ! -e "$ACCESSION_TSV" ]; then
     exit 1
 fi
 
-ALL_FASTA=./fasta_new_vmr_$EA.fa
-SRC_DIR=$(dirname $ALL_FASTA)
-BLASTDB=./blast/ICTV_VMR_$EA
-FIRST_FASTA=$(awk 'BEGIN{FS="\t";GENUS=25;ACC=6}(NR>1){print $GENUS"/"$ACC".fa"}' $ACCESSION_TSV|head -1)
-OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=25;ACC=6}(NR>1){print $GENUS"/"$ACC}' $ACCESSION_TSV|head -1)
+NUC_ALL_FASTA=./fasta_new_vmr_$EA.fna
+NUC_SRC_DIR=$(dirname $NUC_ALL_FASTA)
+PROT_ALL_FASTA=./fasta_new_vmr_$EA.faa
+PROT_SRC_DIR=$(dirname $PROT_ALL_FASTA)
+BLAST_NUC_DB=./blast/ICTV_VMR_${EA}_nuc
+BLAST_PROT_DB=./blast/ICTV_VMR_${EA}_prot
+FIRST_NUC_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $GENUS"/"$ACC".fna"}' $ACCESSION_TSV|head -1)
+OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $GENUS"/"$ACC}' $ACCESSION_TSV|head -1)
+FIRST_PROT_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $GENUS"/"$ACC".faa"}' $ACCESSION_TSV|head -1)
+
+
 
 
 
@@ -62,8 +68,10 @@ makeblastdb -in $ALL_FASTA -input_type "fasta" -title "ICTV VMR_MSL40.v1.2025030
 echo "# Example usage:"
 echo "# mkdir -p ./results/$EA/$(dirname $OUT_FILEPATH)"
 echo "# CSV output"
-echo "# blastn -db $BLASTDB -query ./$SRC_DIR/$FIRST_FASTA -out ./results/$EA/${OUT_FILEPATH}.csv -outfmt '7 delim=,'"
+echo "# blastn -db $BLAST_NUC_DB -query $NUC_SRC_DIR/$FIRST_NUC_FASTA -out ./results/$EA/${OUT_FILEPATH}.csv -outfmt '7 delim=,'"
+echo "# blastp -db $BLAST_PROT_DB -query $PROT_SRC_DIR/$FIRST_PROT_FASTA -out ./results/$EA/${OUT_FILEPATH}.csv -outfmt '7 delim=,'"
 echo "# HTML output"
-echo "# blastn -db $BLASTDB -query ./$SRC_DIR/$FIRST_FASTA -out ./results/$EA/${OUT_FILEPATH}.asn -outfmt '11'"
+echo "# blastn -db $BLAST_NUC_DB -query $NUC_SRC_DIR/$FIRST_NUC_FASTA -out ./results/$EA/${OUT_FILEPATH}.asn -outfmt '11'"
+echo "# blastp -db $BLAST_PROT_DB -query $PROT_SRC_DIR/$FIRST_PROT_FASTA -out ./results/$EA/${OUT_FILEPATH}.asn -outfmt '11'"
 echo "# blast_formatter -archive ./results/$EA/${OUT_FILEPATH}.asn -out ./results/$EA/${OUT_FILEPATH}.html -html"
 
