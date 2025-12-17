@@ -2,8 +2,15 @@
 #
 # Create conda env 
 #
-conda create \
+conda create $* \
 	-p ./conda/vmr \
 	-c bioconda -c conda-forge \
-	pandas openpyxl=2.5.7 numpy biopython blast xlrd
+	pandas \
+	Pyarrow \
+	openpyxl=3 \
+	xlrd \
+	numpy \
+	biopython \
+	bioframe \
+	natsort
 
