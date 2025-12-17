@@ -396,8 +396,6 @@ def fetch_fasta(processed_accession_file_name):
             
             # Assign the computed values to the new columns
             Accessions.loc[count, "accession_gb"] = accession_gb
-            Accessions.loc[count, "accession_aa_fasta"] = accession_aa_fasta
-            Accessions.loc[count, "accession_nt_fasta"] = accession_nt_fasta
             
             
     
@@ -416,7 +414,7 @@ def fetch_fasta(processed_accession_file_name):
                 if args.verbose: print("[FETCH]  EXEC NCBI fetch for {accession_gb}".format(**locals()))
                 try:
                     # fetch FASTA from NCBI
-                    handle = Entrez.efetch(db="nuccore", id=accession_ID, rettype="fasta", retmode="text")
+                    handle = Entrez.efetch(db="nuccore", id=accession_ID, rettype="gb", retmode="text")
 
                     # limit requests: 3/second with email, 10/second with API_KEY
                     time.sleep(entrez_sleep)
