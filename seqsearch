@@ -234,6 +234,28 @@ BLAST_TASK_PARAMETER_SETS = {
       ("-gapextend", "2"),
       ("-dust", "yes"),
       ("-soft_masking", "true")
+   ],
+   "blastp": [
+      ("-task", "blastp"),
+      ("-evalue", "0.05"),
+      ("-word_size", "5"),
+      ("-gapopen", "11"),
+      ("-gapextend", "1"),
+      ("-matrix", "BLOSUM62")
+   ],
+   "psi-blast": [
+      ("-task", "psi-blast"),
+      ("-evalue", "0.05"),
+      ("-word_size", "3"),
+      ("-reward", "2"),
+      ("-penalty", "-3"),
+      ("-gapopen", "11"),
+      ("-gapextend", "1"),
+      ("-matrix", "BLOSUM62"),
+    # PSI-BLAST–specific parameters 
+      ("-inclusion_ethresh", "0.005"), # default inclusion threshold 
+      ("-comp_based_stats", "2"), # 2 = conditional compositional adjustment (default) 
+      ("-pseudocount", "0") # default pseudocount for PSSM generation
    ]
 }
 
@@ -796,7 +818,7 @@ def build_blastasn_base_cmd() -> list[str]:
       raise RuntimeError(f"Invalid BLAST task: {settings.task}")
 
    task_parameters = BLAST_TASK_PARAMETER_SETS[settings.task]
-   command: list[str] = ["blastn"]
+   command: list[str] = [settings.task]
    for option, value in task_parameters:
       command.extend([option, value])
 
@@ -811,13 +833,13 @@ def build_blastasn_base_cmd() -> list[str]:
 
 
 #---------------------------------------------------------------------------------------------------
-# Run blastn on a FASTA file and generate ASN, CSV, and HTML output files.
+# Run blast on a FASTA file and generate ASN, CSV, and HTML output files.
 #---------------------------------------------------------------------------------------------------
 def run_blast(filename: str):
 
    global search_results
 
-   print(f"\nRunning blastn ({settings.task}) on {filename}")
+   print(f"\nRunning blast ({settings.task}) on {filename}")
    
    # Create file names/paths for the output files.
    blastasn_output_filepath = f"{settings.outdir}/{filename}.asn"
@@ -995,8 +1017,8 @@ if __name__ == "__main__" :
    parser.add_argument('-outdir',help="output directory for tax_results.json",default="tax_out")
    parser.add_argument('-json',help="output json filename",default="tax_results.json")
    parser.add_argument('-html',help="output html base filename",default="tax_results")
-   parser.add_argument('-blastdb',help="input blast base filename",default="./blast/ICTV_VMR_b")
-   parser.add_argument('-db', help="BLAST database file", default="blast/ICTV_VMR_b")
+   parser.add_argument('-blastdb',help="input blast base filename",default="./blast/ICTV_VMR_b_nuc")
+   parser.add_argument('-db', help="BLAST database file", default="blast/ICTV_VMR_b_nuc")
    parser.add_argument('-decode', action='store_true', help="Decode the input filenames from base64URL encoding before serializing the search results")
    parser.add_argument('-info', action='store_true', help="Display BLAST database info")
    parser.add_argument('-task', choices=list(BLAST_TASK_PARAMETER_SETS.keys()), default='blastn', help="BLASTN task to execute")
