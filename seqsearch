@@ -260,7 +260,7 @@ BLAST_TASK_PARAMETER_SETS = {
 }
 
 # Valid extensions for input FASTA files.
-FASTA_FILE_EXTENSIONS = [".fa", ".fas", ".fasta", ".ffn", ".fna", ".frn", ".fsa", ".seq", ".txt"]
+FASTA_FILE_EXTENSIONS = [".fa", ".fas", ".fasta", ".ffn", ".fna", ".frn", ".fsa", ".faa", ".seq", ".txt"]
 
 # The maximum number of sequences that can be processed.
 MAX_SEQUENCES = 100
@@ -536,7 +536,7 @@ def get_git_version() -> str:
 def is_valid_sequence(sequence: str) -> bool:
 
    # Validate as a nucleotide sequence.
-   return set(sequence.upper()) <= VALID_NT # or set(sequence.upper()) <= VALID_AA
+   return set(sequence.upper()) <= VALID_NT or set(sequence.upper()) <= VALID_AA
 
 
 
