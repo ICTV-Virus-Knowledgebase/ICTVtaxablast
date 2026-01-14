@@ -42,22 +42,24 @@ PROT_ALL_FASTA=./fasta_new_vmr_$EA.faa
 PROT_SRC_DIR=./fasta_new_vmr_b
 BLAST_NUC_DB=./blast/ICTV_VMR_${EA}_nuc
 BLAST_PROT_DB=./blast/ICTV_VMR_${EA}_prot
-FIRST_NUC_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $GENUS"/"$ACC".fna"}' $ACCESSION_TSV|head -1)
-PROT_OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $GENUS"/"$ACC"_prot"}' $ACCESSION_TSV|head -1)
-NUC_OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $GENUS"/"$ACC"_nuc"}' $ACCESSION_TSV|head -1)
-FIRST_PROT_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $GENUS"/"$ACC".faa"}' $ACCESSION_TSV|head -1)
+FIRST_NUC_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7".fna"}' $ACCESSION_TSV|head -1)
+PROT_OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7"_prot"}' $ACCESSION_TSV|head -1)
+NUC_OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7"_nuc"}' $ACCESSION_TSV|head -1)
+FIRST_PROT_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7".faa"}' $ACCESSION_TSV|head -1)
 
+echo " whats first nuc fasta? $FIRST_NUC_FASTA"
+echo " whats first prot fasta? $FIRST_PROT_FASTA"
 
 
 
 ACCESSION_COUNT=$(tail -n +2 $ACCESSION_TSV |wc -l)
 # Concatenate all formatted FASTA files into a single file for BLAST database creation.
-# Both nucleotide (column 32) and protein (column 31) FASTA files are included to ensure all relevant sequences are present.
+# Both nucleotide (column 33) and protein (column 32) FASTA files are included to ensure all relevant sequences are present.
 echo "# concatenate all $ACCESSION_COUNT formatted fastas"
-echo "cut -f 32 $ACCESSION_TSV | tail -n +2 | xargs cat > $NUC_ALL_FASTA"
-echo "cut -f 31 $ACCESSION_TSV | tail -n +2 | xargs cat > $PROT_ALL_FASTA"
+echo "cut -f 31 $ACCESSION_TSV | tail -n +2 | xargs cat > $NUC_ALL_FASTA"
+echo "cut -f 32 $ACCESSION_TSV | tail -n +2 | xargs cat > $PROT_ALL_FASTA"
+cut -f 31 $ACCESSION_TSV | tail -n +2 | xargs cat > PROT_ALL_FASTA
 cut -f 32 $ACCESSION_TSV | tail -n +2 | xargs cat > $NUC_ALL_FASTA
-cut -f 31 $ACCESSION_TSV | tail -n +2 | xargs cat > $PROT_ALL_FASTA
 ls -lsh $NUC_ALL_FASTA
 ls -lsh $PROT_ALL_FASTA
 echo "# Make the BLAST database"
