@@ -396,6 +396,8 @@ def fetch_fasta(processed_accession_file_name):
             
             # Assign the computed values to the new columns
             Accessions.loc[count, "accession_gb"] = accession_gb
+            Accessions.loc[count, "accession_aa_fasta"] = accession_aa_fasta
+            Accessions.loc[count, "accession_nt_fasta"] = accession_nt_fasta
             
             
     
