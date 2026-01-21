@@ -867,13 +867,13 @@ def run_blast(filename: str):
       command_str = " ".join(shlex.quote(arg) for arg in blastasn_cmd)
       print("BLAST COMMAND:" + command_str)
 
-      # Run blastn on the FASTA file and generate an ASN file.
+      # Run blast on the FASTA file and generate an ASN file.
       subprocess.run(blastasn_cmd, capture_output=True, text=True, check=True)
 
    except subprocess.CalledProcessError as e:
-      raise RuntimeError(f"Runtime error from blastn command: {e.stderr}")
+      raise RuntimeError(f"Runtime error from blast command: {e.stderr}")
    except Exception as ex:
-      raise RuntimeError(f"Error running blastn command: {str(ex)}")
+      raise RuntimeError(f"Error running blast command: {str(ex)}")
 
    # Generate the CSV output file.
    try:
