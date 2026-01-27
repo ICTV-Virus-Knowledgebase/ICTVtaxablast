@@ -490,7 +490,7 @@ def fetch_fasta(processed_accession_file_name):
                                     End_firstline_str = " ".join(str(x) for x in End_firstline)
                                 else:
                                     End_firstline_str = str(End_firstline)
-                                header = f">{Beggining_firstline} {protein_id} {End_firstline_str} product={product_name} "
+                                header = f">{Beggining_firstline}-{protein_id} {End_firstline_str} product={product_name} "
                                 make_bad_protein_len= open(bad_protein_len,'w', newline="")
 
                                 sequence = feature.qualifiers["translation"][0]
