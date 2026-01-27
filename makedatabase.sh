@@ -35,7 +35,7 @@ if [ ! -e "$ACCESSION_TSV" ]; then
     echo "    ./VMR_to_fasta.py -ea $EA -mode fasta  -email \$USER@uab.edu -verbose"
     exit 1
 fi
-
+fasta_dir=./fasta_new_vmr_$EA
 NUC_ALL_FASTA=./fasta_new_vmr_$EA.fna
 NUC_SRC_DIR=dirname $NUC_ALL_FASTA
 PROT_ALL_FASTA=./fasta_new_vmr_$EA.faa
@@ -47,8 +47,7 @@ PROT_OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7"_pro
 NUC_OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7"_nuc"}' $ACCESSION_TSV|head -1)
 FIRST_PROT_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7".faa"}' $ACCESSION_TSV|head -1)
 
-echo " whats first nuc fasta? $FIRST_NUC_FASTA"
-echo " whats first prot fasta? $FIRST_PROT_FASTA"
+
 
 
 
@@ -77,10 +76,10 @@ echo "# Example usage:"
 echo "# mkdir -p ./results/$EA/$(dirname $NUC_OUT_FILEPATH)"
 echo "# mkdir -p ./results/$EA/$(dirname $PROT_OUT_FILEPATH)"
 echo "# CSV output"
-echo "# blastn -db $BLAST_NUC_DB -query $NUC_SRC_DIR/$FIRST_NUC_FASTA -out ./results/$EA/${NUC_OUT_FILEPATH}.csv -outfmt '7 delim=,'"
-echo "# blastp -db $BLAST_PROT_DB -query $PROT_SRC_DIR/$FIRST_PROT_FASTA -out ./results/$EA/${PROT_OUT_FILEPATH}.csv -outfmt '7 delim=,'"
+echo "# blastn -db $BLAST_NUC_DB -query $fasta_dir/$FIRST_NUC_FASTA -out ./results/$EA/${NUC_OUT_FILEPATH}.csv -outfmt '7 delim=,'"
+echo "# blastp -db $BLAST_PROT_DB -query $fasta_dir/$FIRST_PROT_FASTA -out ./results/$EA/${PROT_OUT_FILEPATH}.csv -outfmt '7 delim=,'"
 echo "# HTML output"
-echo "# blastn -db $BLAST_NUC_DB -query $NUC_SRC_DIR/$FIRST_NUC_FASTA -out ./results/$EA/${NUC_OUT_FILEPATH}.asn -outfmt '11'"
-echo "# blastp -db $BLAST_PROT_DB -query $PROT_SRC_DIR/$FIRST_PROT_FASTA -out ./results/$EA/${PROT_OUT_FILEPATH}.asn -outfmt '11'"
+echo "# blastn -db $BLAST_NUC_DB -query $fasta_dir/$FIRST_NUC_FASTA -out ./results/$EA/${NUC_OUT_FILEPATH}.asn -outfmt '11'"
+echo "# blastp -db $BLAST_PROT_DB -query $fasta_dir/$FIRST_PROT_FASTA -out ./results/$EA/${PROT_OUT_FILEPATH}.asn -outfmt '11'"
 echo "# blast_formatter -archive ./results/$EA/${NUC_OUT_FILEPATH}.asn -out ./results/$EA/${NUC_OUT_FILEPATH}.html -html"
 echo "# blast_formatter -archive ./results/$EA/${PROT_OUT_FILEPATH}.asn -out ./results/$EA/${PROT_OUT_FILEPATH}.html -html"
