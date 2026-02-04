@@ -311,6 +311,12 @@ search_results: SearchResults
 
 # The base blastn command used for this run.
 blastasn_base_cmd: list[str] = []
+# The base blastp command used for this run.
+blastp_base_cmd: list[str] = []
+# The base dc-megablast command used for this run.
+blastdc_megablast_base_cmd: list[str] = []
+# The base megablast command used for this run.
+blastmega_base_cmd: list[str] = []
 
 
 #---------------------------------------------------------------------------------------------------
@@ -492,10 +498,16 @@ def generate_fasta_basename_suffix(recordNumber: int) -> str:
 # Use blastdbcmd to determine the BLAST database title.
 #---------------------------------------------------------------------------------------------------
 def get_database_title() -> str:
-
-   # System command to get blast db info "blastdbcmd -db blast/ICTV_VMR_b -info"
+   # if BLAST_TASK_PARAMETER_SETS.get(settings.task) == "blastn":
+      # System command to get blast db info "blastdbcmd -db blast/ICTV_VMR_b -info"
    db_title_command = ["blastdbcmd", "-db", settings.db, "-info"]
    db_title_output = subprocess.run(db_title_command, capture_output=True, text=True, check=True)
+   print("BLAST DB ", db_title_command)
+   # else:
+   #    # System command to get blast db info "blastdbcmd -db blast/ICTV_VMR_b -info"
+   #    db_title_command = ["blastdbcmd", "-db", settings.db, "-info"]
+   #    db_title_output = subprocess.run(db_title_command, capture_output=True, text=True, check=True)
+   #    print("BLAST DB ", db_title_command)
 
    #Split the output into lines and take the first 4 lines with splicing
    db_title_len = db_title_output.stdout.splitlines()
@@ -548,6 +560,10 @@ def main() -> None:
    global parsed_data_df
    global search_results
    global blastasn_base_cmd
+   global blastp_base_cmd
+   global blastdc_megablast_base_cmd
+   global blastmega_base_cmd
+
 
    # Initialize the search results that will be serialized as a JSON output file.
    search_results = SearchResults(
@@ -572,6 +588,12 @@ def main() -> None:
       # Build and store the base BLAST command for this run.
       blastasn_base_cmd = build_blastasn_base_cmd()
       search_results.blastasn_cmd = " ".join(shlex.quote(arg) for arg in blastasn_base_cmd)
+      blastp_base_cmd = build_blastasn_base_cmd()
+      search_results.blastp_cmd = " ".join(shlex.quote(arg) for arg in blastp_base_cmd)
+      blastdc_megablast_base_cmd = build_blastasn_base_cmd()
+      search_results.blastdc_megablast_cmd = " ".join(shlex.quote(arg) for arg in blastdc_megablast_base_cmd)
+      blastmega_base_cmd = build_blastasn_base_cmd()
+      search_results.blastmega_cmd = " ".join(shlex.quote(arg) for arg in blastmega_base_cmd)
 
       # parsed_data_df is df for the processed_accessions_b.tsv file
       parsed_data_df = pd.read_csv(PROCESSED_ACCESSIONS_FILENAME, sep="\t", header=0)
@@ -825,7 +847,7 @@ def build_blastasn_base_cmd() -> list[str]:
    command.extend([
       "-max_target_seqs", str(settings.max_target_seqs),
       "-max_hsps", str(settings.max_hsps),
-      "-db", settings.blastdb,
+      "-db", settings.db,
       "-outfmt", "11"
    ])
 
@@ -1018,7 +1040,11 @@ if __name__ == "__main__" :
    parser.add_argument('-json',help="output json filename",default="tax_results.json")
    parser.add_argument('-html',help="output html base filename",default="tax_results")
    parser.add_argument('-blastdb',help="input blast base filename",default="./blast/ICTV_VMR_b_nuc")
-   parser.add_argument('-db', help="BLAST database file", default="blast/ICTV_VMR_b_nuc")
+   parser.add_argument(
+    "-db",
+    help="BLAST nucleotide database file",
+    nargs="+",
+    default=["blast/ICTV_VMR_b_nuc", "blast/ICTV_VMR_b_prot"])
    parser.add_argument('-decode', action='store_true', help="Decode the input filenames from base64URL encoding before serializing the search results")
    parser.add_argument('-info', action='store_true', help="Display BLAST database info")
    parser.add_argument('-task', choices=list(BLAST_TASK_PARAMETER_SETS.keys()), default='blastn', help="BLASTN task to execute")
@@ -1037,11 +1063,12 @@ if __name__ == "__main__" :
 
    # Ensure the output directory exists
    os.makedirs(args.outdir, exist_ok=True)
-
+   db1= "blast/ICTV_VMR_b_nuc"
+   db2= "blast/ICTV_VMR_b_prot"
    # Initialize settings
    settings = Settings(
       blastdb = args.blastdb,
-      db = args.db,
+      db= db1 if args.task in ["blastn", "megablast", "dc-megablast"] else db2,
       decode_filenames = args.decode,
       html = args.html,
       indir = args.indir,
