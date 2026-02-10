@@ -26,7 +26,8 @@ VER=$(cat $VER_FILE)
 #
 # copy in data files
 #
-./pull_blast_from_cheaha.sh
+# 20260210 curtish now downloading files and building db locally on test
+#./pull_blast_from_cheaha.sh
 
 #
 # Build image from Dockerfile

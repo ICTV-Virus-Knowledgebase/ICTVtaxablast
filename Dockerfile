@@ -21,9 +21,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN set -e \
       && apt-get -y update \
       && apt-get -y dist-upgrade \
-      && apt-get -y install --no-install-recommends --no-install-suggests \
+      && apt-get -y install --no-install-recommends --no-install-suggests --fix-missing \
         apt-transport-https apt-utils ca-certificates locales pandoc pkg-config \
-        ssh rsync \
 	ncbi-blast+ \
 	python3 \
 	python3-pip \
