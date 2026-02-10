@@ -3,10 +3,12 @@
 # set up per-user remotes for github
 #
 
+#
 # scan ~/.ssh for *.pub to find users list
 # (all keys must be named USER.*.pub)
+#
 GIT_USERS=
-for KEY_FILE in $(ls ~/.ssh/*.pub); do
+for KEY_FILE in $(ls ~/.ssh/*.pub | grep -v .ssh/ubuntu ); do
 	echo "# Found $KEY_FILE"
 	GIT_USERS="$GIT_USERS $(basename $KEY_FILE | cut -d . -f 1)"
 done
