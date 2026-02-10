@@ -72,6 +72,7 @@ gitpush-${GIT_USER} () {
 	local branch="\${1:-main}"
 	git config user.name "${USERNAME}"
 	git config user.email "${GIT_USER}@uab.edu"
+	echo git push ${GIT_USER} "\$branch"
 	git push ${GIT_USER} "\$branch"
 } 
 EOT
