@@ -78,6 +78,7 @@ COPY test_out/regression/ ./test_out/regression/
 # what does ENTRYPOINT do exactly?
 # ENTRYPOINT fixed the base command; immutable
 # dmd 09/16/25: changed to ENTRYPOINT from CMD to simplify passing arguments.
-ENTRYPOINT [ "./seqsearch" ]
+# dmd 11/06/2025: changed to CMD from ENTRYPOINT to enable debugging and off-label use
+#ENTRYPOINT [ "./seqsearch" ]
 # CMD add default cmds/arguments
-#CMD [ "./seqsearch" ]
+CMD [ "./seqsearch" ]
