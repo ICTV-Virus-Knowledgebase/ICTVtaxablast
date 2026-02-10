@@ -537,12 +537,12 @@ def fetch_fasta(processed_accession_file_name):
             count=count+1
 
     # output accession table, WITH fasta filenames
-    pd.DataFrame.to_csv(Accessions,processed_accessions_fanames_fname,sep='\t')
+    pd.DataFrame.to_csv(Accessions,processed_accessions_fanames_fname,sep='\t',index=False)
     print("Wrote to {0} rows, {1} columns to {2}".format(*Accessions.shape,processed_accessions_fanames_fname) )
 
     # wrap up and report errors
     print("Bad_Accession count:", len(bad_accessions.index))
-    pd.DataFrame.to_csv(bad_accessions,bad_accessions_fname,sep='\t')
+    pd.DataFrame.to_csv(bad_accessions,bad_accessions_fname,sep='\t',index=False)
     print("Wrote to ", bad_accessions_fname)
 
     
