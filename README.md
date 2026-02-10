@@ -32,9 +32,8 @@ git clone git@github.com:ICTV-Virus-Knowledgebase/ICTVtaxablast.git ICTVtaxablas
 cd !$
 
 # setup env
-./create_conda_env_openpyxl3.sh
-conda activate conda/vmr_openpyxl3
-./version_git.sh
+./create_conda_env.sh
+conda activate conda/vmr
 
 # parse VMR.xlsx -> processed_accessions_b.tsv
 ./VMR_to_fasta.py -mode VMR -ea B -VMR_file_name VMRs/VMR_MSL40.v1.20250307_test_with_longest.xlsx -v
