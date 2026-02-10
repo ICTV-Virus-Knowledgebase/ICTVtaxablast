@@ -68,7 +68,7 @@ done
 # 
 # computed variables
 #
-EA=${EA,,}  # lower case
+EA=$(echo $EA| tr '[:upper:]' '[:lower:]')  # lower case - both linux and mac
 ACCESSION_TSV=processed_accessions_$EA.fa_names.tsv
 TSV_COL_ACC=6
 TSV_COL_GENUS=25
