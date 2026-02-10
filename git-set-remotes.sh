@@ -67,10 +67,10 @@ for GIT_USER in $GIT_USERS; do
 
 # mult-person, one user git convenience function
 gitpush-${GIT_USER} () {
-	local branch="${1:-main}"
+	local branch="\${1:-main}"
 	git config user.name "${USERNAME}"
 	git config user.email "${GIT_USER}@uab.edu"
-	git push ${GIT_USER} "$branch"
+	git push ${GIT_USER} "\$branch"
 } 
 EOT
 	fi
