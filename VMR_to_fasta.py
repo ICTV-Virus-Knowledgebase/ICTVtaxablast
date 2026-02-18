@@ -343,9 +343,14 @@ def fetch_fasta(processed_accession_file_name):
 
     bad_accessions_fname="./bad_accessions_"+args.ea.lower()+".tsv"
     processed_accessions_fanames_fname=processed_accession_file_name.replace(".tsv","")+".fa_names.tsv"
+    processed_protein_accessions_fname="processed_proteins.tsv"
+    protein_accessions_df= pd.DataFrame(columns=["Accession_ID","Protein_id","Product_name"])
+    with open(processed_protein_accessions_fname, 'w') as f: 
+        f.write("\t".join(["Accession_ID", "Protein_id", "Product_name"]) + "\n")
 
     #Check to see if fasta data exists and, if it does, loads the accessions numbers from it into an np array.
     if args.verbose: print("  loading:", processed_accession_file_name)
+    #"Acessions" was for original nt data
     Accessions = pd.read_csv(processed_accession_file_name,sep='\t')
 
     all_reads = []
@@ -474,7 +479,7 @@ def fetch_fasta(processed_accession_file_name):
                         protein_check = set()
                         for feature in gb_open.features:
                             if feature.type == "CDS" and "translation" in feature.qualifiers:
-                # Build FASTA header
+                # Build FASTA header for protein
                                 protein_id = feature.qualifiers.get("protein_id", ["unknown_protein"])[0]
                                 
                                 product_name = feature.qualifiers.get("product", ["unknown_product"])[0]
@@ -493,7 +498,15 @@ def fetch_fasta(processed_accession_file_name):
                                 header = f">{Beggining_firstline}-{protein_id} {End_firstline_str} product={product_name} "
                                 make_bad_protein_len= open(bad_protein_len,'w', newline="")
 
-                                sequence = feature.qualifiers["translation"][0]
+
+
+
+
+
+                                processed_protein_rows = pd.DataFrame( [[accession_ID, protein_id, product_name]], columns=["Accession_ID", "Protein_id", "Product_name"] )
+                                processed_protein_rows.to_csv( processed_protein_accessions_fname, sep='\t', index=False, mode='a', header=False )
+
+                                sequence = feature.qualifiers["translation"][0] 
                                 protein_tuple = (sequence)
                                 seq_in_protein= len(protein_tuple)
                                 #CDS number of nucleotides check
@@ -506,7 +519,8 @@ def fetch_fasta(processed_accession_file_name):
                                     len_match= "YES"
                                 len_report_rows= pd.DataFrame([[accession_ID,seq_in_nt,seq_in_protein,len_match, protein_id]])
                                 pd.DataFrame.to_csv(len_report_rows,make_bad_protein_len,sep='\t',index=False,header=len_report_df.columns)
-                                make_bad_protein_len.close()   
+
+                                make_bad_protein_len.close()
                                
                                 
                                 # Write to .faa
