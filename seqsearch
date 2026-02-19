@@ -264,8 +264,11 @@ FASTA_FILE_EXTENSIONS = [".fa", ".fas", ".fasta", ".ffn", ".fna", ".frn", ".fsa"
 
 # The maximum number of sequences that can be processed.
 MAX_SEQUENCES = 100
-
+#File with all genomes
 PROCESSED_ACCESSIONS_FILENAME = "processed_accessions_b.fa_names.tsv"
+
+#file with all proteins
+PROCESSED_PROTEIN_ACCESSIONS_FILENAME = "processed_proteins.tsv"
 
 # A subdirectory of the input directory for FASTA files containing a single sequence.
 SEQUENCE_FILES_DIR = "sequence_files"
@@ -588,17 +591,22 @@ def main() -> None:
       # Build and store the base BLAST command for this run.
       blastasn_base_cmd = build_blastasn_base_cmd()
       search_results.blastasn_cmd = " ".join(shlex.quote(arg) for arg in blastasn_base_cmd)
-      blastp_base_cmd = build_blastasn_base_cmd()
-      search_results.blastp_cmd = " ".join(shlex.quote(arg) for arg in blastp_base_cmd)
-      blastdc_megablast_base_cmd = build_blastasn_base_cmd()
-      search_results.blastdc_megablast_cmd = " ".join(shlex.quote(arg) for arg in blastdc_megablast_base_cmd)
-      blastmega_base_cmd = build_blastasn_base_cmd()
-      search_results.blastmega_cmd = " ".join(shlex.quote(arg) for arg in blastmega_base_cmd)
+      # blastp_base_cmd = build_blastasn_base_cmd()
+      # search_results.blastp_cmd = " ".join(shlex.quote(arg) for arg in blastp_base_cmd)
+      # blastdc_megablast_base_cmd = build_blastasn_base_cmd()
+      # search_results.blastdc_megablast_cmd = " ".join(shlex.quote(arg) for arg in blastdc_megablast_base_cmd)
+      # blastmega_base_cmd = build_blastasn_base_cmd()
+      # search_results.blastmega_cmd = " ".join(shlex.quote(arg) for arg in blastmega_base_cmd)
 
       # parsed_data_df is df for the processed_accessions_b.tsv file
       parsed_data_df = pd.read_csv(PROCESSED_ACCESSIONS_FILENAME, sep="\t", header=0)
       if (parsed_data_df.empty):
          raise Exception(f"File {PROCESSED_ACCESSIONS_FILENAME} is empty or not found.")
+
+      # parsed_data_df is df for the processed_proteins.tsv file
+      parsed_protein_data_df = pd.read_csv(PROCESSED_PROTEIN_ACCESSIONS_FILENAME, sep="\t", header=0)
+      if (parsed_protein_data_df.empty):
+         raise Exception(f"File {PROCESSED_PROTEIN_ACCESSIONS_FILENAME} is empty or not found.")
 
       # Iterate over FASTA input files and split files with multiple sequences.
       split_files = split_input_files()
@@ -631,6 +639,7 @@ def main() -> None:
 def process_fasta_file(sequence_file: SequenceFile):
 
    global parsed_data_df
+   global parsed_protein_data_df
    
    filename = sequence_file.get_filename()
    input_filename = sequence_file.get_input_filename()
@@ -700,6 +709,8 @@ def process_fasta_file(sequence_file: SequenceFile):
       print(f"Loading CSV file {blastcsv_output_filepath}")
       print("Number of rows: ", len(df))
       print(f"Number of rows in {PROCESSED_ACCESSIONS_FILENAME}: ", len(parsed_data_df))
+      if settings.task == "blastp":
+         print(f"Number of rows in {PROCESSED_PROTEIN_ACCESSIONS_FILENAME}: ", len(parsed_protein_data_df))
       if settings.verbose: 
          print("CSV data:")
          print(df)
@@ -712,6 +723,8 @@ def process_fasta_file(sequence_file: SequenceFile):
 
       # merging the two dataframes by the sBaseAccession column and the Accession column
       merge_dfs = pd.merge(df, parsed_data_df, left_on="sBaseAccession", right_on= "Accession", how="left")
+      if settings.task == "blastp":
+         merge_dfs = pd.merge(merge_dfs, parsed_protein_data_df, left_on="sBaseAccession", right_on= "Accession", how="left", suffixes=("", "_protein"))
       if settings.verbose: print(merge_dfs,"\n")
 
       # check if some blast results didn't match known accessions
@@ -1035,7 +1048,7 @@ if __name__ == "__main__" :
    # TODO: add "dest=" and "required=" to all args.
    parser = argparse.ArgumentParser(description="")
    parser.add_argument('-verbose',help="print details during run",action=argparse.BooleanOptionalAction)
-   parser.add_argument('-indir',help="directory for fasta files with NUCLEOTIDE seqeunces to classify",default="seq_in")
+   parser.add_argument('-indir',help="directory for fasta files with NUCLEOTIDE seqeunces to classify",default="test_data")
    parser.add_argument('-outdir',help="output directory for tax_results.json",default="tax_out")
    parser.add_argument('-json',help="output json filename",default="tax_results.json")
    parser.add_argument('-html',help="output html base filename",default="tax_results")
