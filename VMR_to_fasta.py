@@ -340,13 +340,14 @@ def fetch_fasta(processed_accession_file_name):
         # Create the directory if it doesn't exist
         os.makedirs(args.fasta_dir)
         if args.verbose: print(f"Directory '{args.fasta_dir}' created successfully.")
-
+    #file names for outputs
     bad_accessions_fname="./bad_accessions_"+args.ea.lower()+".tsv"
+    #complete genome accession file
     processed_accessions_fanames_fname=processed_accession_file_name.replace(".tsv","")+".fa_names.tsv"
+    #protein accessions file
     processed_protein_accessions_fname="processed_proteins.tsv"
-    protein_accessions_df= pd.DataFrame(columns=["Accession_ID","Protein_id","Product_name"])
     with open(processed_protein_accessions_fname, 'w') as f: 
-        f.write("\t".join(["Accession_ID", "Protein_id", "Product_name"]) + "\n")
+        f.write("\t".join(["Accession_ID", "Protein_id", "Product_name", "Note", "Codon_start"]) + "\n")
 
     #Check to see if fasta data exists and, if it does, loads the accessions numbers from it into an np array.
     if args.verbose: print("  loading:", processed_accession_file_name)
@@ -484,11 +485,13 @@ def fetch_fasta(processed_accession_file_name):
                                 
                                 product_name = feature.qualifiers.get("product", ["unknown_product"])[0]
                                 protein_count= feature.qualifiers["translation"][0].strip()
+                                note_in_gb = feature.qualifiers.get("note", [""])[0]
+                                codon_start = feature.qualifiers.get("codon_start", [""])[0]
                                 if protein_count:
                                     protein_check.add(protein_count)
 
 
-                                
+                                #first line of .faa file
                                 header = f">{Beggining_firstline} {protein_id} {End_firstline} {product_name} "
                                 # Remove brackets and quotes from End_firstline if it's a list
                                 if isinstance(End_firstline, list):
@@ -502,10 +505,10 @@ def fetch_fasta(processed_accession_file_name):
 
 
 
-
-                                processed_protein_rows = pd.DataFrame( [[accession_ID, protein_id, product_name]], columns=["Accession_ID", "Protein_id", "Product_name"] )
+                                #dataframe for protein accessions and product names
+                                processed_protein_rows = pd.DataFrame( [[accession_ID, protein_id, product_name, note_in_gb, codon_start]], columns=["Accession_ID", "Protein_id", "Product_name", "Note", "Codon_start"] )
                                 processed_protein_rows.to_csv( processed_protein_accessions_fname, sep='\t', index=False, mode='a', header=False )
-
+                                
                                 sequence = feature.qualifiers["translation"][0] 
                                 protein_tuple = (sequence)
                                 seq_in_protein= len(protein_tuple)
