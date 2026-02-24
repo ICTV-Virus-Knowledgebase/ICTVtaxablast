@@ -347,7 +347,7 @@ def fetch_fasta(processed_accession_file_name):
     #protein accessions file
     processed_protein_accessions_fname="processed_proteins.tsv"
     with open(processed_protein_accessions_fname, 'w') as f: 
-        f.write("\t".join(["Accession_ID", "Protein_id", "Product_name", "Note", "Codon_start"]) + "\n")
+        f.write("\t".join(["Accession", "Protein_id", "Product_name", "Note", "Codon_start"]) + "\n")
 
     #Check to see if fasta data exists and, if it does, loads the accessions numbers from it into an np array.
     if args.verbose: print("  loading:", processed_accession_file_name)
@@ -506,7 +506,7 @@ def fetch_fasta(processed_accession_file_name):
 
 
                                 #dataframe for protein accessions and product names
-                                processed_protein_rows = pd.DataFrame( [[accession_ID, protein_id, product_name, note_in_gb, codon_start]], columns=["Accession_ID", "Protein_id", "Product_name", "Note", "Codon_start"] )
+                                processed_protein_rows = pd.DataFrame( [[accession_ID, protein_id, product_name, note_in_gb, codon_start]], columns=["Accession", "Protein_id", "Product_name", "Note", "Codon_start"] )
                                 processed_protein_rows.to_csv( processed_protein_accessions_fname, sep='\t', index=False, mode='a', header=False )
                                 
                                 sequence = feature.qualifiers["translation"][0] 
