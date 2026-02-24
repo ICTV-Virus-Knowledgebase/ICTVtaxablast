@@ -561,6 +561,7 @@ def is_valid_sequence(sequence: str) -> bool:
 def main() -> None:
 
    global parsed_data_df
+   global parsed_protein_data_df
    global search_results
    global blastasn_base_cmd
    global blastp_base_cmd
@@ -709,8 +710,6 @@ def process_fasta_file(sequence_file: SequenceFile):
       print(f"Loading CSV file {blastcsv_output_filepath}")
       print("Number of rows: ", len(df))
       print(f"Number of rows in {PROCESSED_ACCESSIONS_FILENAME}: ", len(parsed_data_df))
-      if settings.task == "blastp":
-         print(f"Number of rows in {PROCESSED_PROTEIN_ACCESSIONS_FILENAME}: ", len(parsed_protein_data_df))
       if settings.verbose: 
          print("CSV data:")
          print(df)
