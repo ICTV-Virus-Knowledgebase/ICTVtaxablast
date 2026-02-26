@@ -720,20 +720,28 @@ def process_fasta_file(sequence_file: SequenceFile):
          print(parsed_data_df)
 
       # initializing the sBaseAccession column in df that is used for joining
-      if settings.task == "blastn":
+      if settings.task == "blastp":
+         # protein fasta headers end withe "-(genomeAccession).ver-(proteinAccession.ver)$"
+         df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\.[0-9]+-(\w[^.]*\..*)$', r'\1',regex=True)
+         df["Protein_id"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\.[0-9]+-(\w[^.]*\..*)$', r'\2',regex=True)
+      else:
+         # nucleotide/genome fasta headers end withe "-(genomeAccession).ver$"
+         if settings.task == "blastn":
          df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\..*$', r'\1', regex=True)
       else:
          df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(?:[^-]*-)?([^.-]+)\..*$', r'\1', regex=True)
-
+      
+      # print sseqid to sBaseAccession mapping for debugging
+      if settings.verbose:
+         print("sseqid to sBaseAccession mapping:")
+         for index, row in df.iterrows():
+            print(f"sseqid: {row['sseqid']} -> sBaseAccession: {row['sBaseAccession']}, Protein_id: {row['Protein_id']}")
+      
 
       
       merge_dfs = pd.merge(df, parsed_data_df, left_on="sBaseAccession", right_on= "Accession", how="left")
       if settings.task == "blastp":
-         merge_dfs = pd.merge(merge_dfs, parsed_protein_data_df, left_on="sBaseAccession", right_on= "Accession", how="left")
-
-
-
-      # merging the two dataframes by the sBaseAccession column and the Accession column
+         merge_dfs = pd.merge(merge_dfs, parsed_protein_data_df, left_on="sBaseAccession", right_on= "Accession", how="left", suffixes=("", "_protein"))
       if settings.verbose: print(merge_dfs,"\n")
 
       # check if some blast results didn't match known accessions
