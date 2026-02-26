@@ -710,6 +710,8 @@ def process_fasta_file(sequence_file: SequenceFile):
       print(f"Loading CSV file {blastcsv_output_filepath}")
       print("Number of rows: ", len(df))
       print(f"Number of rows in {PROCESSED_ACCESSIONS_FILENAME}: ", len(parsed_data_df))
+      if settings.task == "blastp":
+         print(f"Number of rows in {PROCESSED_PROTEIN_ACCESSIONS_FILENAME}: ", len(parsed_protein_data_df))
       if settings.verbose: 
          print("CSV data:")
          print(df)
@@ -718,12 +720,20 @@ def process_fasta_file(sequence_file: SequenceFile):
          print(parsed_data_df)
 
       # initializing the sBaseAccession column in df that is used for joining
-      df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\..*$', r'\1',regex=True)
+      if settings.task == "blastn":
+         df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\..*$', r'\1', regex=True)
+      else:
+         df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(?:[^-]*-)?([^.-]+)\..*$', r'\1', regex=True)
 
-      # merging the two dataframes by the sBaseAccession column and the Accession column
+
+      
       merge_dfs = pd.merge(df, parsed_data_df, left_on="sBaseAccession", right_on= "Accession", how="left")
       if settings.task == "blastp":
-         merge_dfs = pd.merge(merge_dfs, parsed_protein_data_df, left_on="sBaseAccession", right_on= "Accession", how="left", suffixes=("", "_protein"))
+         merge_dfs = pd.merge(merge_dfs, parsed_protein_data_df, left_on="sBaseAccession", right_on= "Accession", how="left")
+
+
+
+      # merging the two dataframes by the sBaseAccession column and the Accession column
       if settings.verbose: print(merge_dfs,"\n")
 
       # check if some blast results didn't match known accessions
