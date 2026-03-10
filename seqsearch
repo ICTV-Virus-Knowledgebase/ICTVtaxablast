@@ -42,6 +42,9 @@ class BlastHit():
    segmentname: str | None
    sseqid: str | None
    sseqid_accession: str | None
+   Protein_id: str | None
+   Product_name: str | None
+   Note: str | None
 
    # Note: The dict keys are realm, subrealm, kingdom, subkingdom, phylum, subphylum, class, subclass, order, suborder, family, subfamily, genus, subgenus, and species.
    sseqid_lineage: Dict[str, str]
@@ -366,6 +369,16 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
    pident = row["pident"]
 
    qseqid = row["qseqid"]
+
+   Protein_id = row["Protein_id"]
+
+   Product_name = row["Product_name"]
+
+   Note = row["Note"]
+   if isinstance(Note, str) and np.isnan(Note):
+      Note = None
+   else:
+      Note = str(Note)
    if isinstance(qseqid, float) and np.isnan(qseqid):
       error_message = f"Error: Invalid qseqid is NaN in row {row_index} of {readable_filename}"
       raise ValueError(error_message)
@@ -431,7 +444,10 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
       sseqid_accession = sseqid_accession,
       sseqid_lineage = sseqid_lineage,
       start_loc = start_loc,
-      virus_names = virus_names
+      virus_names = virus_names,
+      Protein_id = Protein_id,
+      Product_name = Product_name,
+      Note = Note
    )
 
 
@@ -592,13 +608,7 @@ def main() -> None:
       # Build and store the base BLAST command for this run.
       blastasn_base_cmd = build_blastasn_base_cmd()
       search_results.blastasn_cmd = " ".join(shlex.quote(arg) for arg in blastasn_base_cmd)
-      # blastp_base_cmd = build_blastasn_base_cmd()
-      # search_results.blastp_cmd = " ".join(shlex.quote(arg) for arg in blastp_base_cmd)
-      # blastdc_megablast_base_cmd = build_blastasn_base_cmd()
-      # search_results.blastdc_megablast_cmd = " ".join(shlex.quote(arg) for arg in blastdc_megablast_base_cmd)
-      # blastmega_base_cmd = build_blastasn_base_cmd()
-      # search_results.blastmega_cmd = " ".join(shlex.quote(arg) for arg in blastmega_base_cmd)
-
+     
       # parsed_data_df is df for the processed_accessions_b.tsv file
       parsed_data_df = pd.read_csv(PROCESSED_ACCESSIONS_FILENAME, sep="\t", header=0)
       if (parsed_data_df.empty):
