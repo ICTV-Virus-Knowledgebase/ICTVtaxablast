@@ -727,9 +727,9 @@ def process_fasta_file(sequence_file: SequenceFile):
       else:
          # nucleotide/genome fasta headers end withe "-(genomeAccession).ver$"
          if settings.task == "blastn":
-         df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\..*$', r'\1', regex=True)
-      else:
-         df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(?:[^-]*-)?([^.-]+)\..*$', r'\1', regex=True)
+            df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\..*$', r'\1', regex=True)
+         else:
+            df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(?:[^-]*-)?([^.-]+)\..*$', r'\1', regex=True)
       
       # print sseqid to sBaseAccession mapping for debugging
       if settings.verbose:
