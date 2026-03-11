@@ -370,13 +370,18 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
 
    qseqid = row["qseqid"]
 
-   Protein_id = row["Protein_id"]
-
-   Product_name = row["Product_name"]
-
-   Note = row["Note"]
-   if pd.isna(Note):
-      Note = None
+   # if task is blastp, get the Protein_id and Product_name from the parsed_protein_data_df, if not, skip since these columns won't be populated for blastn/dc-megablast/megablast
+   Protein_id = None
+   Product_name = None
+   Note = None
+   if settings.task == "blastp":
+      Protein_id = row["Protein_id"]
+      Product_name = row["Product_name"]
+      if pd.isna(Product_name):
+         Product_name = None
+      Note = row["Note"]
+      if pd.isna(Note):
+         Note = None
    
    if isinstance(qseqid, float) and np.isnan(qseqid):
       error_message = f"Error: Invalid qseqid is NaN in row {row_index} of {readable_filename}"
@@ -735,22 +740,26 @@ def process_fasta_file(sequence_file: SequenceFile):
          df["Protein_id"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\.[0-9]+-(\w[^.]*\..*)$', r'\2',regex=True)
       else:
          # nucleotide/genome fasta headers end withe "-(genomeAccession).ver$"
-         if settings.task == "blastn":
-            df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\..*$', r'\1', regex=True)
-         else:
+         if settings.task == "blastp":
             df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(?:[^-]*-)?([^.-]+)\..*$', r'\1', regex=True)
-      
+         else:
+            df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\..*$', r'\1', regex=True)
+         
       # print sseqid to sBaseAccession mapping for debugging
       if settings.verbose:
          print("sseqid to sBaseAccession mapping:")
          for index, row in df.iterrows():
-            print(f"sseqid: {row['sseqid']} -> sBaseAccession: {row['sBaseAccession']}, Protein_id: {row['Protein_id']}")
+            if settings.task == "blastp":
+               # print Protein_ID too, for blastp
+               print(f"sseqid: {row['sseqid']} -> sBaseAccession: {row['sBaseAccession']}, Protein_id: {row['Protein_id']}")
+            else: 
+               # print w/o Protein_ID for blastn/dc-megablast/megablast since Protein_id is not populated
+               print(f"sseqid: {row['sseqid']} -> sBaseAccession: {row['sBaseAccession']} ")
       
 
-      
       merge_dfs = pd.merge(df, parsed_data_df, left_on="sBaseAccession", right_on= "Accession", how="left")
       if settings.task == "blastp":
-         merge_dfs = pd.merge(merge_dfs, parsed_protein_data_df, left_on="sBaseAccession", right_on= "Accession", how="left", suffixes=("", "_protein"))
+         merge_dfs = pd.merge(merge_dfs, parsed_protein_data_df, left_on="Protein_id", right_on= "Protein_id", how="left", suffixes=("", "_protein"))
       if settings.verbose: print(merge_dfs,"\n")
 
       # check if some blast results didn't match known accessions
@@ -1107,7 +1116,7 @@ if __name__ == "__main__" :
    # Initialize settings
    settings = Settings(
       blastdb = args.blastdb,
-      db= db1 if args.task in ["blastn", "megablast", "dc-megablast"] else db2,
+      db= db2 if args.task in ["blastp"] else db1,
       decode_filenames = args.decode,
       html = args.html,
       indir = args.indir,
