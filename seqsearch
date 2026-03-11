@@ -375,10 +375,9 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
    Product_name = row["Product_name"]
 
    Note = row["Note"]
-   if isinstance(Note, str) and np.isnan(Note):
+   if pd.isna(Note):
       Note = None
-   else:
-      Note = str(Note)
+   
    if isinstance(qseqid, float) and np.isnan(qseqid):
       error_message = f"Error: Invalid qseqid is NaN in row {row_index} of {readable_filename}"
       raise ValueError(error_message)
