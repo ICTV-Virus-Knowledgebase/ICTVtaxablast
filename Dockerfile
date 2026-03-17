@@ -66,14 +66,19 @@ COPY blast_test/ ./blast_test/
 RUN find ./blast/
 COPY processed_accessions_b.tsv ./
 COPY processed_accessions_b.fa_names.tsv ./
+COPY processed_proteins.tsv ./
 #COPY fixed_vmr_a.tsv ./
 #COPY fixed_vmr_e.tsv ./
 
 # 
 # test data
 #
-COPY test_data/one_seq/ ./test_data/one_seq/
-COPY test_out/one_seq/ ./test_out/one_seq/
+COPY test_data/nuc/ ./test_data/nuc/
+COPY test_out/nuc/ ./test_out/nuc/
+
+# Protein Test Files
+COPY test_data/prot/ ./test_data/prot/
+COPY test_out/prot/ ./test_out/prot/
 
 # what does ENTRYPOINT do exactly?
 # ENTRYPOINT fixed the base command; immutable
