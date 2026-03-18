@@ -180,6 +180,7 @@ class SequenceFile():
 # "Constant" definitions
 #---------------------------------------------------------------------------------------------------
 
+
 # Columns in the BLAST CSV file.
 BLAST_RESULT_COLUMNS = [
    "qseqid",
@@ -261,6 +262,8 @@ BLAST_TASK_PARAMETER_SETS = {
       ("-pseudocount", "0") # default pseudocount for PSSM generation
    ]
 }
+
+
 
 # Valid extensions for input FASTA files.
 FASTA_FILE_EXTENSIONS = [".fa", ".fas", ".fasta", ".ffn", ".fna", ".frn", ".fsa", ".faa", ".seq", ".txt"]
@@ -883,14 +886,19 @@ def process_fasta_file(sequence_file: SequenceFile):
 # Build the base blastn command for this run.
 #---------------------------------------------------------------------------------------------------
 def build_blastasn_base_cmd() -> list[str]:
-
    if settings.task not in BLAST_TASK_PARAMETER_SETS:
       raise RuntimeError(f"Invalid BLAST task: {settings.task}")
+   if settings.task != "megablast":
+      task_parameters = BLAST_TASK_PARAMETER_SETS[settings.task]
 
-   task_parameters = BLAST_TASK_PARAMETER_SETS[settings.task]
-   command: list[str] = [settings.task]
-   for option, value in task_parameters:
-      command.extend([option, value])
+      command: list[str] = [settings.task]
+      for option, value in task_parameters:
+         command.extend([option, value])  
+   else:
+      # megablast uses blastn with the -task megablast parameter, so we need to build the command differently.
+      command = ["blastn"]
+      for option, value in BLAST_TASK_PARAMETER_SETS["megablast"]:
+         command.extend([option, value])  
 
    command.extend([
       "-max_target_seqs", str(settings.max_target_seqs),
@@ -900,6 +908,9 @@ def build_blastasn_base_cmd() -> list[str]:
    ])
 
    return command
+
+  
+
 
 
 #---------------------------------------------------------------------------------------------------
