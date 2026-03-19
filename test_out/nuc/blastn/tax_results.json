@@ -1,6 +1,6 @@
 {
     "database_name": "./blast/ICTV_VMR_b_nuc",
-    "database_title": "ICTV VMR_MSL40.v1.20250307 (b) \t27 sequences; 6,868,513 total bases  Date: Feb 25, 2026  12:16 PM\tLongest sequence: 4,857,450 bases",
+    "database_title": "ICTV VMR_MSL40.v1.20250307 (b) \t27 sequences; 6,868,513 total bases  Date: Mar 19, 2026  8:14 PM\tLongest sequence: 4,857,450 bases",
     "errors": [],
     "files": [
         {
@@ -8,8 +8,8 @@
             "name": "AY317101.fna",
             "sequences": [
                 {
-                    "blast_csv": "test_out/nuc/AY317101.fna.csv",
-                    "blast_html": "test_out/nuc/AY317101.fna.html",
+                    "blast_csv": "test_out/nuc/blastn//AY317101.fna.csv",
+                    "blast_html": "test_out/nuc/blastn//AY317101.fna.html",
                     "errors": [],
                     "hits": [
                         {
@@ -62,8 +62,8 @@
             "name": "AY954969.fna",
             "sequences": [
                 {
-                    "blast_csv": "test_out/nuc/AY954969.fna.csv",
-                    "blast_html": "test_out/nuc/AY954969.fna.html",
+                    "blast_csv": "test_out/nuc/blastn//AY954969.fna.csv",
+                    "blast_html": "test_out/nuc/blastn//AY954969.fna.html",
                     "errors": [],
                     "hits": [
                         {
@@ -1189,8 +1189,8 @@
             "name": "HM119428.fna",
             "sequences": [
                 {
-                    "blast_csv": "test_out/nuc/HM119428.fna.csv",
-                    "blast_html": "test_out/nuc/HM119428.fna.html",
+                    "blast_csv": "test_out/nuc/blastn//HM119428.fna.csv",
+                    "blast_html": "test_out/nuc/blastn//HM119428.fna.html",
                     "errors": [],
                     "hits": [
                         {
@@ -1239,9 +1239,9 @@
             ]
         }
     ],
-    "input_dir": "test_data/nuc",
+    "input_dir": "test_data/nuc/",
     "program_name": "seqsearch",
-    "version": "VMR_MSL40.v1.20250307.a0ee2a9",
+    "version": "VMR_MSL40.v1.20250307.e8a4c1e",
     "task": "blastn",
     "max_target_seqs": 50,
     "max_hsps": 25,

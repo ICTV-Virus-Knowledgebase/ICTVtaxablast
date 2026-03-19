@@ -27,9 +27,14 @@ To create conda environments:
 <h2>Quick Start/Test</h2>
 
 ```
+# clone repo
+git clone git@github.com:ICTV-Virus-Knowledgebase/ICTVtaxablast.git ICTVtaxablastp
+cd !$
+
 # setup env
 ./create_conda_env_openpyxl3.sh
 conda activate conda/vmr_openpyxl3
+./version_git.sh
 
 # parse VMR.xlsx -> processed_accessions_b.tsv
 ./VMR_to_fasta.py -mode VMR -ea B -VMR_file_name VMRs/VMR_MSL40.v1.20250307_test_with_longest.xlsx -v
@@ -37,19 +42,36 @@ conda activate conda/vmr_openpyxl3
 # fetch fastas from NCBI and reformat headers
 ./VMR_to_fasta.py -mode fasta -ea b -email $USER@uab.edu -v
 
+# QC download - compare accessions in .fna/.faa to VMR accession lists
+diff --color <(cut -f 6 processed_accessions_b.tsv | tail -n +2 |sort) <(find fasta_new_vmr_b -name "*.fna" -exec grep ">" {} + | cut -d / -f 3 | cut -d . -f 1| sort)
+diff --color <(cut -f 1 processed_proteins.tsv     | tail -n +2 |sort) <(find fasta_new_vmr_b -name "*.faa" -exec grep ">" {} + | cut -d / -f 3 | cut -d . -f 1| sort)
+
 # build blastdb
 ./makedatabase.sh
 
-# search test sequences
+
+# make sure version ID update to date
 ./version_git.sh
-# For blastn
-./seqsearch -indir test_data/nuc -out test_out/nuc -task blastn
-#For blastp
-./seqsearch -indir test_data/prot -out test_out/prot  -task blastp
 
+#
+# test each search task, and diff expected results
+#
+DB=nuc;TASK=blastn
+./taxablast -task $TASK -indir test_data/$DB/ -out test_out/$DB/$TASK/
+git diff -w -u test_out/$DB/$TASK/tax_results.json | dwdiff --diff-input --color -w -P
 
-# compare results to expected
-diff -w -u test_out/one_seq/tax_results.json.good test_out/one_seq/tax_results.json|dwdiff -u --color
+DB=nuc;TASK=megablast
+./taxablast -task $TASK -indir test_data/$DB/ -out test_out/$DB/$TASK/
+git diff -w -u test_out/$DB/$TASK/tax_results.json | dwdiff --diff-input --color -w -P
+
+DB=nuc;TASK=dc-megablast
+./taxablast -task $TASK -indir test_data/$DB/ -out test_out/$DB/$TASK/
+git diff -w -u test_out/$DB/$TASK/tax_results.json | dwdiff --diff-input --color -w -P
+
+DB=prot;TASK=blastp
+./taxablast -task $TASK -indir test_data/$DB/ -out test_out/$DB/$TASK/
+git diff -w -u test_out/$DB/$TASK/tax_results.json | dwdiff --diff-input --color -w -P
+
 ```
 
 <h2>Usage - VMR_to_fasta.py</h3>

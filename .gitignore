@@ -37,6 +37,9 @@ fasta_new_vmr/
 # intermediate files
 fixed_vmr_*.tsv
 refseq*/
+fasta_new_vmr*.fna
+fasta_new_vmr*.faa
+test_data/*/sequence_files/
 # test directories
 tax_out/
 test_out/
