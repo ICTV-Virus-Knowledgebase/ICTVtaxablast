@@ -888,17 +888,14 @@ def process_fasta_file(sequence_file: SequenceFile):
 def build_blastasn_base_cmd() -> list[str]:
    if settings.task not in BLAST_TASK_PARAMETER_SETS:
       raise RuntimeError(f"Invalid BLAST task: {settings.task}")
-   if settings.task != "megablast":
-      task_parameters = BLAST_TASK_PARAMETER_SETS[settings.task]
+   executable= "blastn" if settings.task in ["blastn", "megablast", "dc-megablast"] else "blastp"
+   task_parameters = BLAST_TASK_PARAMETER_SETS[settings.task]
 
-      command: list[str] = [settings.task]
-      for option, value in task_parameters:
+
+   command: list[str] = [executable]
+   for option, value in task_parameters:
          command.extend([option, value])  
-   else:
-      # megablast uses blastn with the -task megablast parameter, so we need to build the command differently.
-      command = ["blastn"]
-      for option, value in BLAST_TASK_PARAMETER_SETS["megablast"]:
-         command.extend([option, value])  
+   
 
    command.extend([
       "-max_target_seqs", str(settings.max_target_seqs),
