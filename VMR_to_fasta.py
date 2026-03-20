@@ -372,7 +372,7 @@ def fetch_fasta(processed_accession_file_name):
     # Fetches FASTA data for every accession number
     count = 0
     for accession_ID in Accessions['Accession']:
-            row = Accessions.loc[count]
+            row = Accessions.loc[count].fillna('')
             Isolate_ID   = row.iloc[1]
             Isolate_type = row.iloc[2]
             segment      = row.iloc[4]
