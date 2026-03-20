@@ -364,7 +364,7 @@ def fetch_fasta(processed_accession_file_name):
     # Fetches FASTA data for every accession number
     count = 0
     for accession_ID in Accessions['Accession']:
-            row = Accessions.loc[count]
+            row = Accessions.loc[count].fillna('')
             Isolate_ID   = row.iloc[1]
             Isolate_type = row.iloc[2]
             segment      = row.iloc[4]
@@ -463,6 +463,7 @@ def fetch_fasta(processed_accession_file_name):
                     desc_line = '>'+field_sep.join([species_name_cleaned,segment_cleaned,accession_cleaned])
                 # add comments to fasta header
                 #desc_line = ' '.join([desc_line,family_name,Isolate_type,Isolate_ID,virus_names])
+                if args.verbose: print("Format [",count,"] fasta header: [desc_line:",desc_line," family_name:",family_name," Isolate_type:",Isolate_type," virus_names:",virus_names,"]")
                 desc_line = ' '.join([desc_line,family_name,Isolate_type,virus_names])
                 
                 if args.verbose: print("    ", desc_line)
