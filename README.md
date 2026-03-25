@@ -42,7 +42,11 @@ conda activate conda/vmr_openpyxl3
 
 # search test sequences
 ./version_git.sh
-./seqsearch -indir test_data/one_seq -out test_out/one_seq
+# For blastn
+./seqsearch -indir test_data/nuc -out test_out/nuc -task blastn
+#For blastp
+./seqsearch -indir test_data/prot -out test_out/prot  -task blastp
+
 
 # compare results to expected
 diff -w -u test_out/one_seq/tax_results.json.good test_out/one_seq/tax_results.json|dwdiff -u --color
@@ -89,7 +93,12 @@ Query for something in the test VMR.
 CSV output: 
 ```
 # CSV output (fmt=7)
+
+#For blastn
 blastn -db ./blast/ICTV_VMR_b -query ./fasta_new_vmr_b/Eponavirus/MG711462.fa -out ./results/e/Eponavirus/MG711462.csv  -outfmt '7 delim=,'"
+#For blastp
+blastp -db ./blast/ICTV_VMR_b_prot -query ./fasta_new_vmr_b/Kayvirus/AY954969.faa -out ./results/b/Kayvirus/AY954969_prot.csv -outfmt '7 delim=,'
+
 ```
 
 HTML output: 
