@@ -50,25 +50,20 @@ RUN set -e \
 # copy in our application
 #
 # do this as a git clone, instead!?!?
-COPY seqsearch .
+COPY taxablast .
 COPY version_git.txt .
+# for backward compatibility
+COPY seqsearch .
 
 #
 # copy in reference data
 #
-#RUN mkdir -p ./blast
 COPY blast/ ./blast/
-COPY blast_test/ ./blast_test/
-#COPY pull_blast_from_cheaha.sh .
-#RUN ./pull_blast_from_cheaha.sh
-#!/usr/bin/env bash
-#
 RUN find ./blast/
+# and MATCHING metadata
 COPY processed_accessions_b.tsv ./
 COPY processed_accessions_b.fa_names.tsv ./
 COPY processed_proteins.tsv ./
-#COPY fixed_vmr_a.tsv ./
-#COPY fixed_vmr_e.tsv ./
 
 # 
 # test data
@@ -83,6 +78,6 @@ COPY test_out/prot/ ./test_out/prot/
 # what does ENTRYPOINT do exactly?
 # ENTRYPOINT fixed the base command; immutable
 # dmd 09/16/25: changed to ENTRYPOINT from CMD to simplify passing arguments.
-ENTRYPOINT [ "./seqsearch" ]
+ENTRYPOINT [ "./taxablast" ]
 # CMD add default cmds/arguments
-#CMD [ "./seqsearch" ]
+#CMD [ "./taxablast" ]

@@ -2,7 +2,7 @@
 #
 # test run our docker image
 #
-TEST=one_seq
+TEST=nuc
 if [[ ! -z "$1" && "$1" != -* ]]; then TEST="$1"; shift; fi
 echo TEST=$TEST
 TEST_DIR=./test_data/$TEST
@@ -15,13 +15,13 @@ mkdir -p $OUT_DIR
 echo sudo docker run -it \
 	-v "${TEST_DIR}:/seq_in" \
 	-v "${OUT_DIR}:/tax_out" \
-	ictv_seqsearch \
+	ictv_taxablast \
 	$*
 
 sudo docker run -it \
 	-v "${TEST_DIR}:/seq_in" \
 	-v "${OUT_DIR}:/tax_out" \
-	ictv_seqsearch \
+	ictv_taxablast \
 	$*
 
 

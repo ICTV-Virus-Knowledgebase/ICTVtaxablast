@@ -72,7 +72,7 @@ class FileData():
    name: str
    sequences: List[SequenceData]
 
-# The SeqSearch results that are saved as a JSON output file.
+# The taxaBLAST results that are saved as a JSON output file.
 @dataclass
 class SearchResults():
    database_name: str
@@ -1091,7 +1091,7 @@ if __name__ == "__main__" :
    # TODO: add "dest=" and "required=" to all args.
    parser = argparse.ArgumentParser(description="")
    parser.add_argument('-verbose',help="print details during run",action=argparse.BooleanOptionalAction)
-   parser.add_argument('-indir',help="directory for fasta files with NUCLEOTIDE seqeunces to classify",default="test_data")
+   parser.add_argument('-indir',help="directory for fasta files with NUCLEOTIDE seqeunces to classify",default="seq_in")
    parser.add_argument('-outdir',help="output directory for tax_results.json",default="tax_out")
    parser.add_argument('-json',help="output json filename",default="tax_results.json")
    parser.add_argument('-html',help="output html base filename",default="tax_results")

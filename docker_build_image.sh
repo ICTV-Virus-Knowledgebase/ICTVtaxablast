@@ -24,14 +24,9 @@ fi
 VER=$(cat $VER_FILE)
 
 #
-# copy in data files
-#
-./pull_blast_from_cheaha.sh
-
-#
 # Build image from Dockerfile
 #
 
-sudo docker build -t ictv_seqsearch .
+sudo docker build -t ictv_taxablast .
 
 
