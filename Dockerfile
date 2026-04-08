@@ -78,6 +78,5 @@ COPY test_out/prot/ ./test_out/prot/
 # what does ENTRYPOINT do exactly?
 # ENTRYPOINT fixed the base command; immutable
 # dmd 09/16/25: changed to ENTRYPOINT from CMD to simplify passing arguments.
-ENTRYPOINT [ "./taxablast" ]
-# CMD add default cmds/arguments
-#CMD [ "./taxablast" ]
+# dmd 11/06/2025: changed to CMD from ENTRYPOINT to enable debugging and off-label use
+CMD [ "./taxablast" ]
