@@ -51,8 +51,6 @@ RUN set -e \
 # do this as a git clone, instead!?!?
 COPY taxablast .
 COPY version_git.txt .
-# for backward compatibility
-COPY seqsearch .
 
 #
 # copy in reference data
