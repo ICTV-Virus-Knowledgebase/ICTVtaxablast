@@ -266,7 +266,7 @@ BLAST_TASK_PARAMETER_SETS = {
 
 
 # Valid extensions for input FASTA files.
-FASTA_FILE_EXTENSIONS = [".fa", ".fas", ".fasta", ".ffn", ".fna", ".frn", ".fsa", ".faa", ".seq", ".txt"]
+FASTA_FILE_EXTENSIONS = [".fa", ".faa", ".fas", ".fasta", ".ffn", ".fna", ".frn", ".fsa", ".faa", ".pep", ".prot", ".seq", ".txt"]
 
 # The maximum number of sequences that can be processed.
 MAX_SEQUENCES = 100
@@ -690,7 +690,7 @@ def process_fasta_file(sequence_file: SequenceFile):
       )
       
    try:
-      # Run blastn on the FASTA file and generate ASN, CSV, and HTML output files.
+      # Run BLAST on the FASTA file and generate ASN, CSV, and HTML output files.
       run_blast(filename)
 
    except RuntimeError as e:
@@ -883,7 +883,7 @@ def process_fasta_file(sequence_file: SequenceFile):
 
 
 #---------------------------------------------------------------------------------------------------
-# Build the base blastn command for this run.
+# Build the base BLAST command for this run.
 #---------------------------------------------------------------------------------------------------
 def build_blastasn_base_cmd() -> list[str]:
    if settings.task not in BLAST_TASK_PARAMETER_SETS:
@@ -894,7 +894,7 @@ def build_blastasn_base_cmd() -> list[str]:
 
    command: list[str] = [executable]
    for option, value in task_parameters:
-         command.extend([option, value])  
+      command.extend([option, value])  
    
 
    command.extend([
@@ -1103,7 +1103,7 @@ if __name__ == "__main__" :
     default=["blast/ICTV_VMR_b_nuc", "blast/ICTV_VMR_b_prot"])
    parser.add_argument('-decode', action='store_true', help="Decode the input filenames from base64URL encoding before serializing the search results")
    parser.add_argument('-info', action='store_true', help="Display BLAST database info")
-   parser.add_argument('-task', choices=list(BLAST_TASK_PARAMETER_SETS.keys()), default='blastn', help="BLASTN task to execute")
+   parser.add_argument('-task', choices=list(BLAST_TASK_PARAMETER_SETS.keys()), default='blastn', help="BLAST task to execute")
    parser.add_argument('-max_target_seqs', type=int, default=50, help="Maximum number of aligned sequences to keep")
    parser.add_argument('-max_hsps', type=int, default=25, help="Maximum number of HSPs per subject sequence")
 
