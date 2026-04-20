@@ -67,14 +67,7 @@ COPY processed_proteins.tsv ./
 # 
 # test data
 #
-# NUC
-COPY test_data/nuc/ ./test_data/nuc/
-COPY test_out/nuc/ ./test_out/nuc/
-
-# PROT
-COPY test_data/prot/ ./test_data/prot/
-COPY test_out/prot/ ./test_out/prot/
-
+COPY test_data/ ./test_data/
 
 # ENTRYPOINT fixed the base command; immutable
 #ENTRYPOINT [ "./taxablast" ]
