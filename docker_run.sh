@@ -30,14 +30,14 @@ for SPEC in $TESTS; do
 	 -v "${TEST_DIR}:/seq_in" \
 	 -v "${OUT_DIR}:/tax_out" \
 	 ictv_taxablast \
-	 --task $TASK \
+	 ./taxablast -task $TASK \
 	 $*
 
     sudo docker run -it \
 	 -v "${TEST_DIR}:/seq_in" \
 	 -v "${OUT_DIR}:/tax_out" \
 	 ictv_taxablast \
-	 --task $TASK \
+	 ./taxablast -task $TASK \
 	 $*
 
 
