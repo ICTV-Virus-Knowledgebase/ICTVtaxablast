@@ -1,0 +1,176 @@
+{
+    "database_name": "./blast/ICTV_VMR_b_nuc",
+    "database_title": "ICTV VMR_MSL40.v1.20250307_test_with_longest.xlsx [b] protein \t6,517 sequences; 1,996,298 total residues  Date: Apr 19, 2026  11:10 PM\tLongest sequence: 5,559 residues",
+    "errors": [],
+    "files": [
+        {
+            "errors": [],
+            "name": "AY317099.faa",
+            "sequences": [
+                {
+                    "blast_csv": "test_out/prot/blastp//AY317099.faa.csv",
+                    "blast_html": "test_out/prot/blastp//AY317099.faa.html",
+                    "errors": [],
+                    "hits": [
+                        {
+                            "bitscore": 2536,
+                            "end_loc": null,
+                            "evalue": 0.0,
+                            "exemplar_additional": "A",
+                            "ictv_id": "ICTV20042009",
+                            "input_seq": "AY317099.faa",
+                            "isolate_id": "VMR1012711",
+                            "length": 1222,
+                            "pident": 100.0,
+                            "qseqid": "Seadornavirus_liaoningense-Seg1-AY317099.1",
+                            "segmentname": "Seg1",
+                            "sseqid": "Seadornavirus_liaoningense-Seg1-AY317099.1-AAQ83562.1",
+                            "sseqid_accession": "AAQ83562.1",
+                            "Protein_id": "AAQ83562.1",
+                            "Product_name": "VP1",
+                            "Note": "RNA-dependent RNA polymerase",
+                            "sseqid_lineage": {
+                                "realm": "Riboviria",
+                                "family": "Sedoreoviridae",
+                                "subfamily": null,
+                                "phylum": "Duplornaviricota",
+                                "class": "Resentoviricetes",
+                                "order": "Reovirales",
+                                "genus": "Seadornavirus",
+                                "species": "Seadornavirus liaoningense",
+                                "kingdom": "Orthornavirae",
+                                "subkingdom": null,
+                                "subphylum": null,
+                                "subrealm": null,
+                                "subclass": null,
+                                "suborder": null,
+                                "subgenus": null
+                            },
+                            "start_loc": null,
+                            "virus_names": "Liao ning virus"
+                        }
+                    ],
+                    "input_file": "AY317099.faa",
+                    "qseqid": "Seadornavirus_liaoningense-Seg1-AY317099.1",
+                    "sequence_length": 1222,
+                    "status": "HITS"
+                }
+            ]
+        },
+        {
+            "errors": [],
+            "name": "AY317100.faa",
+            "sequences": [
+                {
+                    "blast_csv": "test_out/prot/blastp//AY317100.faa.csv",
+                    "blast_html": "test_out/prot/blastp//AY317100.faa.html",
+                    "errors": [],
+                    "hits": [
+                        {
+                            "bitscore": 1981,
+                            "end_loc": null,
+                            "evalue": 0.0,
+                            "exemplar_additional": "A",
+                            "ictv_id": "ICTV20042009",
+                            "input_seq": "AY317100.faa",
+                            "isolate_id": "VMR1012711",
+                            "length": 963,
+                            "pident": 100.0,
+                            "qseqid": "Seadornavirus_liaoningense-Seg2-AY317100.1-AAQ83563.1",
+                            "segmentname": "Seg2",
+                            "sseqid": "Seadornavirus_liaoningense-Seg2-AY317100.1-AAQ83563.1",
+                            "sseqid_accession": "AAQ83563.1",
+                            "Protein_id": "AAQ83563.1",
+                            "Product_name": "VP2",
+                            "Note": null,
+                            "sseqid_lineage": {
+                                "realm": "Riboviria",
+                                "family": "Sedoreoviridae",
+                                "subfamily": null,
+                                "phylum": "Duplornaviricota",
+                                "class": "Resentoviricetes",
+                                "order": "Reovirales",
+                                "genus": "Seadornavirus",
+                                "species": "Seadornavirus liaoningense",
+                                "kingdom": "Orthornavirae",
+                                "subkingdom": null,
+                                "subphylum": null,
+                                "subrealm": null,
+                                "subclass": null,
+                                "suborder": null,
+                                "subgenus": null
+                            },
+                            "start_loc": null,
+                            "virus_names": "Liao ning virus"
+                        }
+                    ],
+                    "input_file": "AY317100.faa",
+                    "qseqid": "Seadornavirus_liaoningense-Seg2-AY317100.1-AAQ83563.1",
+                    "sequence_length": 963,
+                    "status": "HITS"
+                }
+            ]
+        },
+        {
+            "errors": [],
+            "name": "AY954969-AAX92092.faa",
+            "sequences": [
+                {
+                    "blast_csv": "test_out/prot/blastp//AY954969-AAX92092.faa.csv",
+                    "blast_html": "test_out/prot/blastp//AY954969-AAX92092.faa.html",
+                    "errors": [],
+                    "hits": [
+                        {
+                            "bitscore": 1271,
+                            "end_loc": null,
+                            "evalue": 0.0,
+                            "exemplar_additional": "E",
+                            "ictv_id": "ICTV20115492",
+                            "input_seq": "AY954969-AAX92092.faa",
+                            "isolate_id": "VMR1001950",
+                            "length": 605,
+                            "pident": 100.0,
+                            "qseqid": "Kayvirus_G1--AY954969.1-AAX92092.1",
+                            "segmentname": null,
+                            "sseqid": "Kayvirus_G1--AY954969.1-AAX92092.1",
+                            "sseqid_accession": "AAX92092.1",
+                            "Protein_id": "AAX92092.1",
+                            "Product_name": "ORF010",
+                            "Note": "G1ORF010",
+                            "sseqid_lineage": {
+                                "realm": "Duplodnaviria",
+                                "family": "Herelleviridae",
+                                "subfamily": "Twortvirinae",
+                                "phylum": "Uroviricota",
+                                "class": "Caudoviricetes",
+                                "order": null,
+                                "genus": "Kayvirus",
+                                "species": "Kayvirus G1",
+                                "kingdom": "Heunggongvirae",
+                                "subkingdom": null,
+                                "subphylum": null,
+                                "subrealm": null,
+                                "subclass": null,
+                                "suborder": null,
+                                "subgenus": null
+                            },
+                            "start_loc": null,
+                            "virus_names": "Staphylococcus phage G1"
+                        }
+                    ],
+                    "input_file": "AY954969-AAX92092.faa",
+                    "qseqid": "Kayvirus_G1--AY954969.1-AAX92092.1",
+                    "sequence_length": 605,
+                    "status": "HITS"
+                }
+            ]
+        }
+    ],
+    "input_dir": "test_data/prot/",
+    "program_name": "taxablast",
+    "version": "VMR_MSL41.v1.20260320.cmd.protein.merged.32f19af",
+    "task": "blastp",
+    "max_target_seqs": 50,
+    "max_hsps": 25,
+    "blastasn_cmd": "blastp -task blastp -evalue 0.05 -word_size 5 -gapopen 11 -gapextend 1 -matrix BLOSUM62 -max_target_seqs 50 -max_hsps 25 -db ./blast/ICTV_VMR_b_prot -outfmt 11"
+}

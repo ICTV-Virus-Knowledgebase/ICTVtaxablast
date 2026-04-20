@@ -42,6 +42,9 @@ class BlastHit():
    segmentname: str | None
    sseqid: str | None
    sseqid_accession: str | None
+   Protein_id: str | None
+   Product_name: str | None
+   Note: str | None
 
    # Note: The dict keys are realm, subrealm, kingdom, subkingdom, phylum, subphylum, class, subclass, order, suborder, family, subfamily, genus, subgenus, and species.
    sseqid_lineage: Dict[str, str]
@@ -69,7 +72,7 @@ class FileData():
    name: str
    sequences: List[SequenceData]
 
-# The SeqSearch results that are saved as a JSON output file.
+# The taxaBLAST results that are saved as a JSON output file.
 @dataclass
 class SearchResults():
    database_name: str
@@ -87,7 +90,6 @@ class SearchResults():
 # When this module is called from the command line, the settings are populated from command line arguments.
 @dataclass
 class Settings():
-   blastdb: str
    db: str
    decode_filenames: bool
    html: str
@@ -202,48 +204,84 @@ CSV_METADATA_COLUMNS = [
 CSV_COLUMNS = BLAST_RESULT_COLUMNS + CSV_METADATA_COLUMNS
 
 BLAST_TASK_PARAMETER_SETS = {
-   "blastn": [
-      ("-task", "blastn"),
-      ("-evalue", "0.05"),
-      ("-word_size", "11"),
-      ("-reward", "2"),
-      ("-penalty", "-3"),
-      ("-gapopen", "5"),
-      ("-gapextend", "2"),
-      ("-dust", "yes"),
-      ("-soft_masking", "true")
-   ],
-   "megablast": [
-      ("-task", "megablast"),
-      ("-evalue", "0.05"),
-      ("-word_size", "28"),
-      ("-reward", "1"),
-      ("-penalty", "-2"),
-      ("-gapopen", "0"),
-      ("-gapextend", "2"),
-      ("-dust", "yes"),
-      ("-soft_masking", "true")
-   ],
-   "dc-megablast": [
-      ("-task", "dc-megablast"),
-      ("-evalue", "0.05"),
-      ("-word_size", "11"),
-      ("-reward", "1"),
-      ("-penalty", "-2"),
-      ("-gapopen", "0"),
-      ("-gapextend", "2"),
-      ("-dust", "yes"),
-      ("-soft_masking", "true")
-   ]
+   "blastn": {
+       "exec": "blastn",
+       "db_type": "nuc",
+       "params": [
+           ("-task", "blastn"),
+           ("-evalue", "0.05"),
+           ("-word_size", "11"),
+           ("-reward", "2"),
+           ("-penalty", "-3"),
+           ("-gapopen", "5"),
+           ("-gapextend", "2"),
+           ("-dust", "yes"),
+           ("-soft_masking", "true")
+       ]},
+   "megablast": {
+       "exec": "blastn",
+       "db_type": "nuc",
+       "params": [
+           ("-task", "megablast"),
+           ("-evalue", "0.05"),
+           ("-word_size", "28"),
+           ("-reward", "1"),
+           ("-penalty", "-2"),
+           ("-gapopen", "0"),
+           ("-gapextend", "2"),
+           ("-dust", "yes"),
+           ("-soft_masking", "true")
+       ]},
+   "dc-megablast": {
+       "exec": "blastn",
+       "db_type": "nuc",
+       "params": [
+           ("-task", "dc-megablast"),
+           ("-evalue", "0.05"),
+           ("-word_size", "11"),
+           ("-reward", "1"),
+           ("-penalty", "-2"),
+           ("-gapopen", "0"),
+           ("-gapextend", "2"),
+           ("-dust", "yes"),
+           ("-soft_masking", "true")
+       ]},
+   "blastp": {
+       "exec": "blastp",
+       "db_type": "prot",
+       "params": [
+           ("-task", "blastp"),
+           ("-evalue", "0.05"),
+           ("-word_size", "5"),
+           ("-gapopen", "11"),
+           ("-gapextend", "1"),
+           ("-matrix", "BLOSUM62")
+       ]},
+   "blastx":  {
+       "exec": "blastx",
+       "db_type": "prot",
+       "params": [
+           ("-task", "blastx"),
+           ("-evalue", "0.05"),
+           ("-word_size", "5"),
+           ("-gapopen", "11"),
+           ("-gapextend", "1"),
+           ("-matrix", "BLOSUM62"),
+       ]
+   }
 }
 
 # Valid extensions for input FASTA files.
-FASTA_FILE_EXTENSIONS = [".fa", ".fas", ".fasta", ".ffn", ".fna", ".frn", ".fsa", ".seq", ".txt"]
+FASTA_FILE_EXTENSIONS = [".fa", ".faa", ".fas", ".fasta", ".ffn", ".fna", ".frn", ".fsa", ".faa", ".pep", ".prot", ".seq", ".txt"]
 
 # The maximum number of sequences that can be processed.
 MAX_SEQUENCES = 100
 
+#File with all genomes
 PROCESSED_ACCESSIONS_FILENAME = "processed_accessions_b.fa_names.tsv"
+
+#file with all proteins
+PROCESSED_PROTEIN_ACCESSIONS_FILENAME = "processed_proteins.tsv"
 
 # A subdirectory of the input directory for FASTA files containing a single sequence.
 SEQUENCE_FILES_DIR = "sequence_files"
@@ -289,11 +327,37 @@ search_results: SearchResults
 
 # The base blastn command used for this run.
 blastasn_base_cmd: list[str] = []
+# The base blastp command used for this run.
+blastp_base_cmd: list[str] = []
+# The base dc-megablast command used for this run.
+blastdc_megablast_base_cmd: list[str] = []
+# The base megablast command used for this run.
+blastmega_base_cmd: list[str] = []
+# The base blastx command used for this run.
+blastx_base_cmd: list[str] = []
 
 
 #---------------------------------------------------------------------------------------------------
 # Function definitions
 #---------------------------------------------------------------------------------------------------
+
+def get_blast_db_from_task() -> str:
+
+   # get  --task argument to look up db_type
+   task_parameters = BLAST_TASK_PARAMETER_SETS[args.task]
+
+   print("# get_blast_db_from_task()")
+   print(task_parameters)
+   print(task_parameters["db_type"])
+   # look up the right db path for that db_type
+   db_type = task_parameters["db_type"]
+   if db_type == "nuc":
+       return(str(args.nuc_db))
+   elif db_type == "prot":
+       return(str(args.prot_db))
+   else:                       
+      raise RuntimeError(f"Invalid BLAST db_type: {db_type}")
+
 
 #---------------------------------------------------------------------------------------------------
 # Create a BLAST hit object using a data row.
@@ -335,6 +399,21 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
    pident = row["pident"]
 
    qseqid = row["qseqid"]
+
+   # if task is blastp, get the Protein_id and Product_name from the parsed_protein_data_df, if not, skip since these columns won't be populated for blastn/dc-megablast/megablast
+   Protein_id = None
+   Product_name = None
+   Note = None
+   if settings.task == "blastp" or settings.task == "blastx":
+      Protein_id = row["Protein_id"]
+      Product_name = row["Product_name"]
+      if pd.isna(Product_name):
+         Product_name = None
+      Note = row["Note"]
+      if pd.isna(Note):
+         Note = None
+
+
    if isinstance(qseqid, float) and np.isnan(qseqid):
       error_message = f"Error: Invalid qseqid is NaN in row {row_index} of {readable_filename}"
       raise ValueError(error_message)
@@ -400,7 +479,10 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
       sseqid_accession = sseqid_accession,
       sseqid_lineage = sseqid_lineage,
       start_loc = start_loc,
-      virus_names = virus_names
+      virus_names = virus_names,
+      Protein_id = Protein_id,
+      Product_name = Product_name,
+      Note = Note
    )
 
 
@@ -472,9 +554,10 @@ def generate_fasta_basename_suffix(recordNumber: int) -> str:
 def get_database_title() -> str:
 
    # System command to get blast db info "blastdbcmd -db blast/ICTV_VMR_b -info"
-   db_title_command = ["blastdbcmd", "-db", settings.db, "-info"]
+   db_title_command = ["blastdbcmd", "-db", get_blast_db_from_task(), "-info"]
    db_title_output = subprocess.run(db_title_command, capture_output=True, text=True, check=True)
-
+   print("BLAST DB ", db_title_command)
+   
    #Split the output into lines and take the first 4 lines with splicing
    db_title_len = db_title_output.stdout.splitlines()
    first_4_lines = db_title_len[:4]
@@ -514,7 +597,7 @@ def get_git_version() -> str:
 def is_valid_sequence(sequence: str) -> bool:
 
    # Validate as a nucleotide sequence.
-   return set(sequence.upper()) <= VALID_NT # or set(sequence.upper()) <= VALID_AA
+   return set(sequence.upper()) <= VALID_NT or set(sequence.upper()) <= VALID_AA
 
 
 
@@ -524,12 +607,16 @@ def is_valid_sequence(sequence: str) -> bool:
 def main() -> None:
 
    global parsed_data_df
+   global parsed_protein_data_df
    global search_results
    global blastasn_base_cmd
+   global blastp_base_cmd
+   global blastdc_megablast_base_cmd
+   global blastmega_base_cmd
 
    # Initialize the search results that will be serialized as a JSON output file.
    search_results = SearchResults(
-      database_name = str(settings.blastdb),
+      database_name = str(args.nuc_db),
       database_title = "",
       errors = [],
       files = [],
@@ -556,6 +643,11 @@ def main() -> None:
       if (parsed_data_df.empty):
          raise Exception(f"File {PROCESSED_ACCESSIONS_FILENAME} is empty or not found.")
 
+      # parsed_protein_data_df is df for the processed_proteins.tsv file
+      parsed_protein_data_df = pd.read_csv(PROCESSED_PROTEIN_ACCESSIONS_FILENAME, sep="\t", header=0)
+      if (parsed_protein_data_df.empty):
+         raise Exception(f"File {PROCESSED_PROTEIN_ACCESSIONS_FILENAME} is empty or not found.")
+
       # Iterate over FASTA input files and split files with multiple sequences.
       split_files = split_input_files()
       if not split_files or len(split_files) < 1:
@@ -566,7 +658,7 @@ def main() -> None:
          process_fasta_file(split_file)
 
       # Add the file data lookup to the search results as a list.
-      for filename in file_data_lookup:
+      for filename in sorted(file_data_lookup, key=str):
 
          # Get the associated file data.
          file_data = file_data_lookup[filename]
@@ -587,6 +679,7 @@ def main() -> None:
 def process_fasta_file(sequence_file: SequenceFile):
 
    global parsed_data_df
+   global parsed_protein_data_df
    
    filename = sequence_file.get_filename()
    input_filename = sequence_file.get_input_filename()
@@ -606,7 +699,9 @@ def process_fasta_file(sequence_file: SequenceFile):
       else:
          message += f" from input file {input_filename}"
    
+   print("\n# ----------------------------------------------------------------------")
    print(message)
+   print("# ----------------------------------------------------------------------")
 
    # Look for the input file's data in json_results. If it hasn't been added yet, create a new input file data object.
    if input_filename in file_data_lookup:
@@ -619,7 +714,7 @@ def process_fasta_file(sequence_file: SequenceFile):
       )
       
    try:
-      # Run blastn on the FASTA file and generate ASN, CSV, and HTML output files.
+      # Run BLAST on the FASTA file and generate ASN, CSV, and HTML output files.
       run_blast(filename)
 
    except RuntimeError as e:
@@ -656,6 +751,8 @@ def process_fasta_file(sequence_file: SequenceFile):
       print(f"Loading CSV file {blastcsv_output_filepath}")
       print("Number of rows: ", len(df))
       print(f"Number of rows in {PROCESSED_ACCESSIONS_FILENAME}: ", len(parsed_data_df))
+      if settings.task == "blastp" or settings.task == "blastx":
+         print(f"Number of rows in {PROCESSED_PROTEIN_ACCESSIONS_FILENAME}: ", len(parsed_protein_data_df))
       if settings.verbose: 
          print("CSV data:")
          print(df)
@@ -664,10 +761,32 @@ def process_fasta_file(sequence_file: SequenceFile):
          print(parsed_data_df)
 
       # initializing the sBaseAccession column in df that is used for joining
-      df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\..*$', r'\1',regex=True)
+      if settings.task == "blastp" or settings.task == "blastx":
+         # protein fasta headers end withe "-(genomeAccession).ver-(proteinAccession.ver)$"
+         df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\.[0-9]+-(\w[^.]*\..*)$', r'\1',regex=True)
+         df["Protein_id"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\.[0-9]+-(\w[^.]*\..*)$', r'\2',regex=True)
+      else:
+         # nucleotide/genome fasta headers end withe "-(genomeAccession).ver$"
+         if settings.task == "blastp":
+            df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(?:[^-]*-)?([^.-]+)\..*$', r'\1', regex=True)
+         else:
+            df["sBaseAccession"] = df["sseqid"].astype(str).str.replace(r'^.*-(\w[^.]*)\..*$', r'\1', regex=True)
+         
+      # print sseqid to sBaseAccession mapping for debugging
+      if settings.verbose:
+         print("sseqid to sBaseAccession mapping:")
+         for index, row in df.iterrows():
+            if settings.task == "blastp":
+               # print Protein_ID too, for blastp
+               print(f"sseqid: {row['sseqid']} -> sBaseAccession: {row['sBaseAccession']}, Protein_id: {row['Protein_id']}")
+            else: 
+               # print w/o Protein_ID for blastn/dc-megablast/megablast since Protein_id is not populated
+               print(f"sseqid: {row['sseqid']} -> sBaseAccession: {row['sBaseAccession']} ")
 
       # merging the two dataframes by the sBaseAccession column and the Accession column
       merge_dfs = pd.merge(df, parsed_data_df, left_on="sBaseAccession", right_on= "Accession", how="left")
+      if settings.task == "blastp" or settings.task == "blastx":
+         merge_dfs = pd.merge(merge_dfs, parsed_protein_data_df, left_on="Protein_id", right_on= "Protein_id", how="left", suffixes=("", "_protein"))
       if settings.verbose: print(merge_dfs,"\n")
 
       # check if some blast results didn't match known accessions
@@ -788,36 +907,46 @@ def process_fasta_file(sequence_file: SequenceFile):
 
 
 #---------------------------------------------------------------------------------------------------
-# Build the base blastn command for this run.
+# Build the base BLAST command for this run.
 #---------------------------------------------------------------------------------------------------
 def build_blastasn_base_cmd() -> list[str]:
 
+   print("build_blastasn_base_cmd()")
    if settings.task not in BLAST_TASK_PARAMETER_SETS:
       raise RuntimeError(f"Invalid BLAST task: {settings.task}")
-
    task_parameters = BLAST_TASK_PARAMETER_SETS[settings.task]
-   command: list[str] = ["blastn"]
-   for option, value in task_parameters:
-      command.extend([option, value])
 
+   # exec is a special parameter, we don't pass the "option" through as a flag
+   command: list[str] = [task_parameters["exec"]]
+   print(command)
+   
+   # add all the literal flags
+   for option, value in task_parameters["params"]:
+       if option.startswith("-"):
+           command.extend([option, value])
+   print(command)
+
+
+   # add the common flags
    command.extend([
       "-max_target_seqs", str(settings.max_target_seqs),
       "-max_hsps", str(settings.max_hsps),
-      "-db", settings.blastdb,
+      "-db", get_blast_db_from_task(),
       "-outfmt", "11"
    ])
+   print(command)
 
    return command
 
 
 #---------------------------------------------------------------------------------------------------
-# Run blastn on a FASTA file and generate ASN, CSV, and HTML output files.
+# Run BLAST on a FASTA file and generate ASN, CSV, and HTML output files.
 #---------------------------------------------------------------------------------------------------
 def run_blast(filename: str):
 
    global search_results
 
-   print(f"\nRunning blastn ({settings.task}) on {filename}")
+   print(f"\nRunning blast ({settings.task}) on {filename}")
    
    # Create file names/paths for the output files.
    blastasn_output_filepath = f"{settings.outdir}/{filename}.asn"
@@ -828,7 +957,7 @@ def run_blast(filename: str):
    print(f"HTML output path: {blasthtml_output_filepath}")
 
    # The FASTA file's full path.
-   fasta_path = f"{settings.indir}/{SEQUENCE_FILES_DIR}/{filename}"
+   fasta_path = f"{settings.outdir}/{SEQUENCE_FILES_DIR}/{filename}"
 
    command_str = ""
 
@@ -845,13 +974,13 @@ def run_blast(filename: str):
       command_str = " ".join(shlex.quote(arg) for arg in blastasn_cmd)
       print("BLAST COMMAND:" + command_str)
 
-      # Run blastn on the FASTA file and generate an ASN file.
+      # Run blast on the FASTA file and generate an ASN file.
       subprocess.run(blastasn_cmd, capture_output=True, text=True, check=True)
 
    except subprocess.CalledProcessError as e:
-      raise RuntimeError(f"Runtime error from blastn command: {e.stderr}")
+      raise RuntimeError(f"Runtime error from blast command: {e.stderr}")
    except Exception as ex:
-      raise RuntimeError(f"Error running blastn command: {str(ex)}")
+      raise RuntimeError(f"Error running blast command: {str(ex)}")
 
    # Generate the CSV output file.
    try:
@@ -906,13 +1035,15 @@ def split_input_files() -> list[SequenceFile] | None:
 
    # Create a path object from the input directory.
    input_directory = Path(settings.indir)
+   output_directory = Path(settings.outdir)
    
    # Create the SEQUENCE_FILES_DIR subdirectory.
-   seq_files_path = input_directory / SEQUENCE_FILES_DIR
+   seq_files_path = output_directory / SEQUENCE_FILES_DIR
    seq_files_path.mkdir(exist_ok=True)
 
-   # Iterate over all files in the input directory.
-   for input_file in input_directory.iterdir():
+   # Iterate over all files in the input directory
+   # Sort so that order is stable, makes output regression testing easier.
+   for input_file in sorted(input_directory.iterdir(), key=lambda path: path.name):
 
       # Make sure the file has a valid extension for a FASTA file.
       if input_file.suffix.lower() not in FASTA_FILE_EXTENSIONS:
@@ -995,11 +1126,11 @@ if __name__ == "__main__" :
    parser.add_argument('-outdir',help="output directory for tax_results.json",default="tax_out")
    parser.add_argument('-json',help="output json filename",default="tax_results.json")
    parser.add_argument('-html',help="output html base filename",default="tax_results")
-   parser.add_argument('-blastdb',help="input blast base filename",default="./blast/ICTV_VMR_b")
-   parser.add_argument('-db', help="BLAST database file", default="blast/ICTV_VMR_b")
+   parser.add_argument('-nuc-db',help="input BLAST nucleotide base filename",default="./blast/ICTV_VMR_b_nuc")
+   parser.add_argument('-prot-db', help="input BLAST protein database file",default="./blast/ICTV_VMR_b_prot")
    parser.add_argument('-decode', action='store_true', help="Decode the input filenames from base64URL encoding before serializing the search results")
    parser.add_argument('-info', action='store_true', help="Display BLAST database info")
-   parser.add_argument('-task', choices=list(BLAST_TASK_PARAMETER_SETS.keys()), default='blastn', help="BLASTN task to execute")
+   parser.add_argument('-task', choices=list(BLAST_TASK_PARAMETER_SETS.keys()), default='blastn', help="BLAST task to execute")
    parser.add_argument('-max_target_seqs', type=int, default=50, help="Maximum number of aligned sequences to keep")
    parser.add_argument('-max_hsps', type=int, default=25, help="Maximum number of HSPs per subject sequence")
 
@@ -1015,11 +1146,12 @@ if __name__ == "__main__" :
 
    # Ensure the output directory exists
    os.makedirs(args.outdir, exist_ok=True)
+   db_nuc= "blast/ICTV_VMR_b_nuc"
+   db_prot= "blast/ICTV_VMR_b_prot"
 
    # Initialize settings
    settings = Settings(
-      blastdb = args.blastdb,
-      db = args.db,
+      db = get_blast_db_from_task(),
       decode_filenames = args.decode,
       html = args.html,
       indir = args.indir,

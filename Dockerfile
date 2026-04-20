@@ -49,7 +49,7 @@ RUN set -e \
 # copy in our application
 #
 # do this as a git clone, instead!?!?
-COPY seqsearch .
+COPY taxablast .
 COPY version_git.txt .
 
 #
@@ -57,27 +57,26 @@ COPY version_git.txt .
 #
 #RUN mkdir -p ./blast
 COPY blast/ ./blast/
-COPY blast_test/ ./blast_test/
-#COPY pull_blast_from_cheaha.sh .
-#RUN ./pull_blast_from_cheaha.sh
-#!/usr/bin/env bash
-#
+#COPY blast_test/ ./blast_test/
 RUN find ./blast/
-COPY processed_accessions_b.tsv ./
+
+# and MATCHING metadata
 COPY processed_accessions_b.fa_names.tsv ./
-#COPY fixed_vmr_a.tsv ./
-#COPY fixed_vmr_e.tsv ./
+COPY processed_proteins.tsv ./
 
 # 
 # test data
 #
-COPY test_data/regression/ ./test_data/regression/
-COPY test_out/regression/ ./test_out/regression/
+# NUC
+COPY test_data/nuc/ ./test_data/nuc/
+COPY test_out/nuc/ ./test_out/nuc/
 
-# what does ENTRYPOINT do exactly?
+# PROT
+COPY test_data/prot/ ./test_data/prot/
+COPY test_out/prot/ ./test_out/prot/
+
+
 # ENTRYPOINT fixed the base command; immutable
-# dmd 09/16/25: changed to ENTRYPOINT from CMD to simplify passing arguments.
-# dmd 11/06/2025: changed to CMD from ENTRYPOINT to enable debugging and off-label use
-#ENTRYPOINT [ "./seqsearch" ]
+#ENTRYPOINT [ "./taxablast" ]
 # CMD add default cmds/arguments
-CMD [ "./seqsearch" ]
+CMD [ "./taxablast" ]

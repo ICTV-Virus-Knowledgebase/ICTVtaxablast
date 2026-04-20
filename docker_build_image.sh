@@ -33,6 +33,6 @@ VER=$(cat $VER_FILE)
 # Build image from Dockerfile
 #
 
-sudo docker build -t ictv_seqsearch .
+sudo docker build -t ictv_taxablast .
 
 

@@ -1,6 +1,6 @@
 {
-    "database_name": "./blast/ICTV_VMR_b",
-    "database_title": "ICTV VMR_MSL40.v1.20250307 (b) \t27 sequences; 6,868,513 total bases  Date: Oct 15, 2025  10:29 AM\tLongest sequence: 4,857,450 bases",
+    "database_name": "./blast/ICTV_VMR_b_nuc",
+    "database_title": "ICTV VMR_MSL40.v1.20250307_test_with_longest.xlsx [b] genomic \t28 sequences; 6,872,778 total bases  Date: Apr 19, 2026  11:10 PM\tLongest sequence: 4,857,450 bases",
     "errors": [],
     "files": [
         {
@@ -8,8 +8,8 @@
             "name": "HM119428.fa",
             "sequences": [
                 {
-                    "blast_csv": "test_out/regression/HM119428.fa.csv",
-                    "blast_html": "test_out/regression/HM119428.fa.html",
+                    "blast_csv": "test_out/nuc/blastn//HM119428.fa.csv",
+                    "blast_html": "test_out/nuc/blastn//HM119428.fa.html",
                     "errors": [],
                     "hits": [
                         {
@@ -26,6 +26,9 @@
                             "segmentname": "L",
                             "sseqid": "Phlebovirus_candiruense-L-HM119428.1",
                             "sseqid_accession": "HM119428.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Riboviria",
                                 "family": "Phenuiviridae",
@@ -56,210 +59,17 @@
         },
         {
             "errors": [],
-            "name": "Phlebovirus_candiruense-SNRV.fa",
+            "name": "J02451_no_hits.fa",
             "sequences": [
                 {
-                    "blast_csv": "test_out/regression/Phlebovirus_candiruense-SNRV_seq0001.fa.csv",
-                    "blast_html": "test_out/regression/Phlebovirus_candiruense-SNRV_seq0001.fa.html",
+                    "blast_csv": "test_out/nuc/blastn//J02451_no_hits.fa.csv",
+                    "blast_html": "test_out/nuc/blastn//J02451_no_hits.fa.html",
                     "errors": [],
-                    "hits": [
-                        {
-                            "bitscore": 11564,
-                            "end_loc": null,
-                            "evalue": 0.0,
-                            "exemplar_additional": "A",
-                            "ictv_id": "ICTV19990689",
-                            "input_seq": "Phlebovirus_candiruense-SNRV_seq0001.fa",
-                            "isolate_id": "VMR1011336",
-                            "length": 6412,
-                            "pident": 100.0,
-                            "qseqid": "HM119428.1",
-                            "segmentname": "L",
-                            "sseqid": "Phlebovirus_candiruense-L-HM119428.1",
-                            "sseqid_accession": "HM119428.1",
-                            "sseqid_lineage": {
-                                "realm": "Riboviria",
-                                "family": "Phenuiviridae",
-                                "subfamily": null,
-                                "phylum": "Negarnaviricota",
-                                "class": "Bunyaviricetes",
-                                "order": "Hareavirales",
-                                "genus": "Phlebovirus",
-                                "species": "Phlebovirus candiruense",
-                                "kingdom": "Orthornavirae",
-                                "subkingdom": null,
-                                "subphylum": "Polyploviricotina",
-                                "subrealm": null,
-                                "subclass": null,
-                                "suborder": null,
-                                "subgenus": null
-                            },
-                            "start_loc": null,
-                            "virus_names": "Serra Norte virus"
-                        }
-                    ],
-                    "input_file": "Phlebovirus_candiruense-SNRV_seq0001.fa",
-                    "qseqid": "HM119428.1",
-                    "sequence_length": 6412,
-                    "status": "HITS"
-                },
-                {
-                    "blast_csv": "test_out/regression/Phlebovirus_candiruense-SNRV_seq0002.fa.csv",
-                    "blast_html": "test_out/regression/Phlebovirus_candiruense-SNRV_seq0002.fa.html",
-                    "errors": [],
-                    "hits": [
-                        {
-                            "bitscore": 8221,
-                            "end_loc": null,
-                            "evalue": 0.0,
-                            "exemplar_additional": "A",
-                            "ictv_id": "ICTV19990689",
-                            "input_seq": "Phlebovirus_candiruense-SNRV_seq0002.fa",
-                            "isolate_id": "VMR1011336",
-                            "length": 4558,
-                            "pident": 100.0,
-                            "qseqid": "HM119429.1",
-                            "segmentname": "M",
-                            "sseqid": "Phlebovirus_candiruense-M-HM119429.1",
-                            "sseqid_accession": "HM119429.1",
-                            "sseqid_lineage": {
-                                "realm": "Riboviria",
-                                "family": "Phenuiviridae",
-                                "subfamily": null,
-                                "phylum": "Negarnaviricota",
-                                "class": "Bunyaviricetes",
-                                "order": "Hareavirales",
-                                "genus": "Phlebovirus",
-                                "species": "Phlebovirus candiruense",
-                                "kingdom": "Orthornavirae",
-                                "subkingdom": null,
-                                "subphylum": "Polyploviricotina",
-                                "subrealm": null,
-                                "subclass": null,
-                                "suborder": null,
-                                "subgenus": null
-                            },
-                            "start_loc": null,
-                            "virus_names": "Serra Norte virus"
-                        },
-                        {
-                            "bitscore": 313,
-                            "end_loc": null,
-                            "evalue": 1.55e-84,
-                            "exemplar_additional": "A",
-                            "ictv_id": "ICTV19990689",
-                            "input_seq": "Phlebovirus_candiruense-SNRV_seq0002.fa",
-                            "isolate_id": "VMR1011336",
-                            "length": 173,
-                            "pident": 100.0,
-                            "qseqid": "HM119429.1",
-                            "segmentname": "M",
-                            "sseqid": "Phlebovirus_candiruense-M-HM119429.1",
-                            "sseqid_accession": "HM119429.1",
-                            "sseqid_lineage": {
-                                "realm": "Riboviria",
-                                "family": "Phenuiviridae",
-                                "subfamily": null,
-                                "phylum": "Negarnaviricota",
-                                "class": "Bunyaviricetes",
-                                "order": "Hareavirales",
-                                "genus": "Phlebovirus",
-                                "species": "Phlebovirus candiruense",
-                                "kingdom": "Orthornavirae",
-                                "subkingdom": null,
-                                "subphylum": "Polyploviricotina",
-                                "subrealm": null,
-                                "subclass": null,
-                                "suborder": null,
-                                "subgenus": null
-                            },
-                            "start_loc": null,
-                            "virus_names": "Serra Norte virus"
-                        },
-                        {
-                            "bitscore": 313,
-                            "end_loc": null,
-                            "evalue": 1.55e-84,
-                            "exemplar_additional": "A",
-                            "ictv_id": "ICTV19990689",
-                            "input_seq": "Phlebovirus_candiruense-SNRV_seq0002.fa",
-                            "isolate_id": "VMR1011336",
-                            "length": 173,
-                            "pident": 100.0,
-                            "qseqid": "HM119429.1",
-                            "segmentname": "M",
-                            "sseqid": "Phlebovirus_candiruense-M-HM119429.1",
-                            "sseqid_accession": "HM119429.1",
-                            "sseqid_lineage": {
-                                "realm": "Riboviria",
-                                "family": "Phenuiviridae",
-                                "subfamily": null,
-                                "phylum": "Negarnaviricota",
-                                "class": "Bunyaviricetes",
-                                "order": "Hareavirales",
-                                "genus": "Phlebovirus",
-                                "species": "Phlebovirus candiruense",
-                                "kingdom": "Orthornavirae",
-                                "subkingdom": null,
-                                "subphylum": "Polyploviricotina",
-                                "subrealm": null,
-                                "subclass": null,
-                                "suborder": null,
-                                "subgenus": null
-                            },
-                            "start_loc": null,
-                            "virus_names": "Serra Norte virus"
-                        }
-                    ],
-                    "input_file": "Phlebovirus_candiruense-SNRV_seq0002.fa",
-                    "qseqid": "HM119429.1",
-                    "sequence_length": 4558,
-                    "status": "HITS"
-                },
-                {
-                    "blast_csv": "test_out/regression/Phlebovirus_candiruense-SNRV_seq0003.fa.csv",
-                    "blast_html": "test_out/regression/Phlebovirus_candiruense-SNRV_seq0003.fa.html",
-                    "errors": [],
-                    "hits": [
-                        {
-                            "bitscore": 3357,
-                            "end_loc": null,
-                            "evalue": 0.0,
-                            "exemplar_additional": "A",
-                            "ictv_id": "ICTV19990689",
-                            "input_seq": "Phlebovirus_candiruense-SNRV_seq0003.fa",
-                            "isolate_id": "VMR1011336",
-                            "length": 1861,
-                            "pident": 100.0,
-                            "qseqid": "HM119430.1",
-                            "segmentname": "S",
-                            "sseqid": "Phlebovirus_candiruense-S-HM119430.1",
-                            "sseqid_accession": "HM119430.1",
-                            "sseqid_lineage": {
-                                "realm": "Riboviria",
-                                "family": "Phenuiviridae",
-                                "subfamily": null,
-                                "phylum": "Negarnaviricota",
-                                "class": "Bunyaviricetes",
-                                "order": "Hareavirales",
-                                "genus": "Phlebovirus",
-                                "species": "Phlebovirus candiruense",
-                                "kingdom": "Orthornavirae",
-                                "subkingdom": null,
-                                "subphylum": "Polyploviricotina",
-                                "subrealm": null,
-                                "subclass": null,
-                                "suborder": null,
-                                "subgenus": null
-                            },
-                            "start_loc": null,
-                            "virus_names": "Serra Norte virus"
-                        }
-                    ],
-                    "input_file": "Phlebovirus_candiruense-SNRV_seq0003.fa",
-                    "qseqid": "HM119430.1",
-                    "sequence_length": 1861,
-                    "status": "HITS"
+                    "hits": [],
+                    "input_file": "J02451_no_hits.fa",
+                    "qseqid": "",
+                    "sequence_length": 6408,
+                    "status": "NO_HITS"
                 }
             ]
         },
@@ -268,8 +78,8 @@
             "name": "KT732817.fa",
             "sequences": [
                 {
-                    "blast_csv": "test_out/regression/KT732817.fa.csv",
-                    "blast_html": "test_out/regression/KT732817.fa.html",
+                    "blast_csv": "test_out/nuc/blastn//KT732817.fa.csv",
+                    "blast_html": "test_out/nuc/blastn//KT732817.fa.html",
                     "errors": [],
                     "hits": [
                         {
@@ -286,6 +96,9 @@
                             "segmentname": null,
                             "sseqid": "Zirakzivirus_serni--KT732817.1",
                             "sseqid_accession": "KT732817.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Monodnaviria",
                                 "family": "Adamaviridae",
@@ -320,6 +133,9 @@
                             "segmentname": null,
                             "sseqid": "Zirakzivirus_serni--KT732817.1",
                             "sseqid_accession": "KT732817.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Monodnaviria",
                                 "family": "Adamaviridae",
@@ -354,6 +170,9 @@
                             "segmentname": null,
                             "sseqid": "Zirakzivirus_serni--KT732817.1",
                             "sseqid_accession": "KT732817.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Monodnaviria",
                                 "family": "Adamaviridae",
@@ -377,7 +196,7 @@
                         {
                             "bitscore": 77.0,
                             "end_loc": null,
-                            "evalue": 4.98e-14,
+                            "evalue": 4.99e-14,
                             "exemplar_additional": "E",
                             "ictv_id": "ICTV202318536",
                             "input_seq": "KT732817.fa",
@@ -388,6 +207,9 @@
                             "segmentname": null,
                             "sseqid": "Zirakzivirus_serni--KT732816.1",
                             "sseqid_accession": "KT732816.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Monodnaviria",
                                 "family": "Adamaviridae",
@@ -422,6 +244,9 @@
                             "segmentname": null,
                             "sseqid": "Zirakzivirus_serni--KT732816.1",
                             "sseqid_accession": "KT732816.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Monodnaviria",
                                 "family": "Adamaviridae",
@@ -456,6 +281,9 @@
                             "segmentname": null,
                             "sseqid": "Zirakzivirus_serni--KT732816.1",
                             "sseqid_accession": "KT732816.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Monodnaviria",
                                 "family": "Adamaviridae",
@@ -490,6 +318,9 @@
                             "segmentname": null,
                             "sseqid": "Zirakzivirus_serni--KT732815.1",
                             "sseqid_accession": "KT732815.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Monodnaviria",
                                 "family": "Adamaviridae",
@@ -524,6 +355,9 @@
                             "segmentname": null,
                             "sseqid": "Zirakzivirus_serni--KT732815.1",
                             "sseqid_accession": "KT732815.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Monodnaviria",
                                 "family": "Adamaviridae",
@@ -554,27 +388,11 @@
         },
         {
             "errors": [],
-            "name": "J02451_no_hits.fa",
-            "sequences": [
-                {
-                    "blast_csv": "test_out/regression/J02451_no_hits.fa.csv",
-                    "blast_html": "test_out/regression/J02451_no_hits.fa.html",
-                    "errors": [],
-                    "hits": [],
-                    "input_file": "J02451_no_hits.fa",
-                    "qseqid": "",
-                    "sequence_length": 6408,
-                    "status": "NO_HITS"
-                }
-            ]
-        },
-        {
-            "errors": [],
             "name": "PP467602.fa",
             "sequences": [
                 {
-                    "blast_csv": "test_out/regression/PP467602.fa.csv",
-                    "blast_html": "test_out/regression/PP467602.fa.html",
+                    "blast_csv": "test_out/nuc/blastn//PP467602.fa.csv",
+                    "blast_html": "test_out/nuc/blastn//PP467602.fa.html",
                     "errors": [],
                     "hits": [
                         {
@@ -591,6 +409,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -625,6 +446,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -659,6 +483,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -693,6 +520,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -727,6 +557,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -761,6 +594,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -795,6 +631,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -818,7 +657,7 @@
                         {
                             "bitscore": 80.6,
                             "end_loc": null,
-                            "evalue": 9.82e-14,
+                            "evalue": 9.83e-14,
                             "exemplar_additional": "E",
                             "ictv_id": "ICTV202420188",
                             "input_seq": "PP467602.fa",
@@ -829,6 +668,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -852,7 +694,7 @@
                         {
                             "bitscore": 80.6,
                             "end_loc": null,
-                            "evalue": 9.82e-14,
+                            "evalue": 9.83e-14,
                             "exemplar_additional": "E",
                             "ictv_id": "ICTV202420188",
                             "input_seq": "PP467602.fa",
@@ -863,6 +705,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -897,6 +742,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -931,6 +779,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -965,6 +816,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -999,6 +853,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -1033,6 +890,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -1067,6 +927,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -1101,6 +964,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -1135,6 +1001,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -1158,7 +1027,7 @@
                         {
                             "bitscore": 52.7,
                             "end_loc": null,
-                            "evalue": 4.76e-05,
+                            "evalue": 4.77e-05,
                             "exemplar_additional": "E",
                             "ictv_id": "ICTV202420188",
                             "input_seq": "PP467602.fa",
@@ -1169,6 +1038,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -1192,7 +1064,7 @@
                         {
                             "bitscore": 52.7,
                             "end_loc": null,
-                            "evalue": 4.76e-05,
+                            "evalue": 4.77e-05,
                             "exemplar_additional": "E",
                             "ictv_id": "ICTV202420188",
                             "input_seq": "PP467602.fa",
@@ -1203,6 +1075,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -1226,7 +1101,7 @@
                         {
                             "bitscore": 51.8,
                             "end_loc": null,
-                            "evalue": 4.76e-05,
+                            "evalue": 4.77e-05,
                             "exemplar_additional": "E",
                             "ictv_id": "ICTV202420188",
                             "input_seq": "PP467602.fa",
@@ -1237,6 +1112,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -1260,7 +1138,7 @@
                         {
                             "bitscore": 51.8,
                             "end_loc": null,
-                            "evalue": 4.76e-05,
+                            "evalue": 4.77e-05,
                             "exemplar_additional": "E",
                             "ictv_id": "ICTV202420188",
                             "input_seq": "PP467602.fa",
@@ -1271,6 +1149,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -1305,6 +1186,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -1339,6 +1223,9 @@
                             "segmentname": null,
                             "sseqid": "Wargodvirus_xiongnu--PP467602.1",
                             "sseqid_accession": "PP467602.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
                             "sseqid_lineage": {
                                 "realm": "Adnaviria",
                                 "family": "Chiyouviridae",
@@ -1366,13 +1253,237 @@
                     "status": "HITS"
                 }
             ]
+        },
+        {
+            "errors": [],
+            "name": "Phlebovirus_candiruense-SNRV.fa",
+            "sequences": [
+                {
+                    "blast_csv": "test_out/nuc/blastn//Phlebovirus_candiruense-SNRV_seq0001.fa.csv",
+                    "blast_html": "test_out/nuc/blastn//Phlebovirus_candiruense-SNRV_seq0001.fa.html",
+                    "errors": [],
+                    "hits": [
+                        {
+                            "bitscore": 11564,
+                            "end_loc": null,
+                            "evalue": 0.0,
+                            "exemplar_additional": "A",
+                            "ictv_id": "ICTV19990689",
+                            "input_seq": "Phlebovirus_candiruense-SNRV_seq0001.fa",
+                            "isolate_id": "VMR1011336",
+                            "length": 6412,
+                            "pident": 100.0,
+                            "qseqid": "HM119428.1",
+                            "segmentname": "L",
+                            "sseqid": "Phlebovirus_candiruense-L-HM119428.1",
+                            "sseqid_accession": "HM119428.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
+                            "sseqid_lineage": {
+                                "realm": "Riboviria",
+                                "family": "Phenuiviridae",
+                                "subfamily": null,
+                                "phylum": "Negarnaviricota",
+                                "class": "Bunyaviricetes",
+                                "order": "Hareavirales",
+                                "genus": "Phlebovirus",
+                                "species": "Phlebovirus candiruense",
+                                "kingdom": "Orthornavirae",
+                                "subkingdom": null,
+                                "subphylum": "Polyploviricotina",
+                                "subrealm": null,
+                                "subclass": null,
+                                "suborder": null,
+                                "subgenus": null
+                            },
+                            "start_loc": null,
+                            "virus_names": "Serra Norte virus"
+                        }
+                    ],
+                    "input_file": "Phlebovirus_candiruense-SNRV_seq0001.fa",
+                    "qseqid": "HM119428.1",
+                    "sequence_length": 6412,
+                    "status": "HITS"
+                },
+                {
+                    "blast_csv": "test_out/nuc/blastn//Phlebovirus_candiruense-SNRV_seq0002.fa.csv",
+                    "blast_html": "test_out/nuc/blastn//Phlebovirus_candiruense-SNRV_seq0002.fa.html",
+                    "errors": [],
+                    "hits": [
+                        {
+                            "bitscore": 8221,
+                            "end_loc": null,
+                            "evalue": 0.0,
+                            "exemplar_additional": "A",
+                            "ictv_id": "ICTV19990689",
+                            "input_seq": "Phlebovirus_candiruense-SNRV_seq0002.fa",
+                            "isolate_id": "VMR1011336",
+                            "length": 4558,
+                            "pident": 100.0,
+                            "qseqid": "HM119429.1",
+                            "segmentname": "M",
+                            "sseqid": "Phlebovirus_candiruense-M-HM119429.1",
+                            "sseqid_accession": "HM119429.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
+                            "sseqid_lineage": {
+                                "realm": "Riboviria",
+                                "family": "Phenuiviridae",
+                                "subfamily": null,
+                                "phylum": "Negarnaviricota",
+                                "class": "Bunyaviricetes",
+                                "order": "Hareavirales",
+                                "genus": "Phlebovirus",
+                                "species": "Phlebovirus candiruense",
+                                "kingdom": "Orthornavirae",
+                                "subkingdom": null,
+                                "subphylum": "Polyploviricotina",
+                                "subrealm": null,
+                                "subclass": null,
+                                "suborder": null,
+                                "subgenus": null
+                            },
+                            "start_loc": null,
+                            "virus_names": "Serra Norte virus"
+                        },
+                        {
+                            "bitscore": 313,
+                            "end_loc": null,
+                            "evalue": 1.55e-84,
+                            "exemplar_additional": "A",
+                            "ictv_id": "ICTV19990689",
+                            "input_seq": "Phlebovirus_candiruense-SNRV_seq0002.fa",
+                            "isolate_id": "VMR1011336",
+                            "length": 173,
+                            "pident": 100.0,
+                            "qseqid": "HM119429.1",
+                            "segmentname": "M",
+                            "sseqid": "Phlebovirus_candiruense-M-HM119429.1",
+                            "sseqid_accession": "HM119429.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
+                            "sseqid_lineage": {
+                                "realm": "Riboviria",
+                                "family": "Phenuiviridae",
+                                "subfamily": null,
+                                "phylum": "Negarnaviricota",
+                                "class": "Bunyaviricetes",
+                                "order": "Hareavirales",
+                                "genus": "Phlebovirus",
+                                "species": "Phlebovirus candiruense",
+                                "kingdom": "Orthornavirae",
+                                "subkingdom": null,
+                                "subphylum": "Polyploviricotina",
+                                "subrealm": null,
+                                "subclass": null,
+                                "suborder": null,
+                                "subgenus": null
+                            },
+                            "start_loc": null,
+                            "virus_names": "Serra Norte virus"
+                        },
+                        {
+                            "bitscore": 313,
+                            "end_loc": null,
+                            "evalue": 1.55e-84,
+                            "exemplar_additional": "A",
+                            "ictv_id": "ICTV19990689",
+                            "input_seq": "Phlebovirus_candiruense-SNRV_seq0002.fa",
+                            "isolate_id": "VMR1011336",
+                            "length": 173,
+                            "pident": 100.0,
+                            "qseqid": "HM119429.1",
+                            "segmentname": "M",
+                            "sseqid": "Phlebovirus_candiruense-M-HM119429.1",
+                            "sseqid_accession": "HM119429.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
+                            "sseqid_lineage": {
+                                "realm": "Riboviria",
+                                "family": "Phenuiviridae",
+                                "subfamily": null,
+                                "phylum": "Negarnaviricota",
+                                "class": "Bunyaviricetes",
+                                "order": "Hareavirales",
+                                "genus": "Phlebovirus",
+                                "species": "Phlebovirus candiruense",
+                                "kingdom": "Orthornavirae",
+                                "subkingdom": null,
+                                "subphylum": "Polyploviricotina",
+                                "subrealm": null,
+                                "subclass": null,
+                                "suborder": null,
+                                "subgenus": null
+                            },
+                            "start_loc": null,
+                            "virus_names": "Serra Norte virus"
+                        }
+                    ],
+                    "input_file": "Phlebovirus_candiruense-SNRV_seq0002.fa",
+                    "qseqid": "HM119429.1",
+                    "sequence_length": 4558,
+                    "status": "HITS"
+                },
+                {
+                    "blast_csv": "test_out/nuc/blastn//Phlebovirus_candiruense-SNRV_seq0003.fa.csv",
+                    "blast_html": "test_out/nuc/blastn//Phlebovirus_candiruense-SNRV_seq0003.fa.html",
+                    "errors": [],
+                    "hits": [
+                        {
+                            "bitscore": 3357,
+                            "end_loc": null,
+                            "evalue": 0.0,
+                            "exemplar_additional": "A",
+                            "ictv_id": "ICTV19990689",
+                            "input_seq": "Phlebovirus_candiruense-SNRV_seq0003.fa",
+                            "isolate_id": "VMR1011336",
+                            "length": 1861,
+                            "pident": 100.0,
+                            "qseqid": "HM119430.1",
+                            "segmentname": "S",
+                            "sseqid": "Phlebovirus_candiruense-S-HM119430.1",
+                            "sseqid_accession": "HM119430.1",
+                            "Protein_id": null,
+                            "Product_name": null,
+                            "Note": null,
+                            "sseqid_lineage": {
+                                "realm": "Riboviria",
+                                "family": "Phenuiviridae",
+                                "subfamily": null,
+                                "phylum": "Negarnaviricota",
+                                "class": "Bunyaviricetes",
+                                "order": "Hareavirales",
+                                "genus": "Phlebovirus",
+                                "species": "Phlebovirus candiruense",
+                                "kingdom": "Orthornavirae",
+                                "subkingdom": null,
+                                "subphylum": "Polyploviricotina",
+                                "subrealm": null,
+                                "subclass": null,
+                                "suborder": null,
+                                "subgenus": null
+                            },
+                            "start_loc": null,
+                            "virus_names": "Serra Norte virus"
+                        }
+                    ],
+                    "input_file": "Phlebovirus_candiruense-SNRV_seq0003.fa",
+                    "qseqid": "HM119430.1",
+                    "sequence_length": 1861,
+                    "status": "HITS"
+                }
+            ]
         }
     ],
-    "input_dir": "test_data/regression",
-    "program_name": "seqsearch",
-    "version": "VMR_MSL40.v1.20250307.c335db6",
+    "input_dir": "test_data/nuc/",
+    "program_name": "taxablast",
+    "version": "VMR_MSL41.v1.20260320.cmd.protein.merged.32f19af",
     "task": "blastn",
     "max_target_seqs": 50,
     "max_hsps": 25,
-    "blastasn_cmd": "blastn -task blastn -evalue 0.05 -word_size 11 -reward 2 -penalty -3 -gapopen 5 -gapextend 2 -dust yes -soft_masking true -max_target_seqs 50 -max_hsps 25 -db ./blast/ICTV_VMR_b -outfmt 11"
+    "blastasn_cmd": "blastn -task blastn -evalue 0.05 -word_size 11 -reward 2 -penalty -3 -gapopen 5 -gapextend 2 -dust yes -soft_masking true -max_target_seqs 50 -max_hsps 25 -db blast/ICTV_VMR_b_nuc -outfmt 11"
 }

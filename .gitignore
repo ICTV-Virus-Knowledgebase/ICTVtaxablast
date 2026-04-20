@@ -10,10 +10,6 @@ nohup.out
 ##
 #internal file osx
 .DS_Store
-# blast results
-results/*/**.csv
-results/*/*
-results/.merge*
 # blast DB
 blast/
 # Blast DB files
@@ -30,13 +26,13 @@ log.*
 # conda environments
 conda/
 # downloaded fasta
-*.fa
-fasta_new_vmr_b/
-fasta_new_vmr_a/
-fasta_new_vmr/
+fasta_new_vmr_*/
 # intermediate files
 fixed_vmr_*.tsv
-refseq*/
+processed_proteins.tsv
+processed_accessions_*.fa_names.tsv
+processed_accessions_*.tsv
+fasta_new_vmr_*.faa
+fasta_new_vmr_*.fna
 # test directories
-tax_out/
 test_out/

@@ -14,26 +14,6 @@ if [[ "$1" == -h* ]]; then cat <<EOT
 EOT
 	exit 0
 fi
-# 20240117 runtime ~7h, RAM=402M
-#
-#SBATCH --job-name=ICTV_VMR_makeblastdb_e
-#SBATCH --output=logs/log.%J.%x.out
-#SBATCH --error=logs/log.%J.%x.out
-#
-# Number of tasks needed for this job. Generally, used with MPI jobs
-# Time format = HH:MM:SS, DD-HH:MM:SS
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=1
-#SBATCH --partition=amd-hdr100 --time=00-12:00:00
-##SBATCH --partition=amd-hdr100 --time=06-06:00:00
-##SBATCH --partition=medium --time=40:00:00
-#
-# Number of CPUs allocated to each task. 
-#
-# Mimimum memory required per allocated  CPU  in  MegaBytes. 
-#  last run was 402M
-#SBATCH --mem-per-cpu=30000
-#
 
 # parse args
 while [[ "$1" == -* ]]; do
@@ -68,31 +48,55 @@ done
 # 
 # computed variables
 #
-EA=$(echo $EA| tr '[:upper:]' '[:lower:]')  # lower case - both linux and mac
-ACCESSION_TSV=processed_accessions_$EA.fa_names.tsv
+EA=$(echo ${EA}| tr '[:upper:]' '[:lower:]')  # lower case - both linux and mac
+ACCESSION_TSV=processed_accessions_${EA}.fa_names.tsv
+ACCESSION_COUNT=$(tail -n +2 $ACCESSION_TSV |wc -l)
 TSV_COL_ACC=6
 TSV_COL_GENUS=25
-TSV_COL_FASTA=30
+TSV_COL_FASTA_PROT=30
+TSV_COL_FASTA_NUC=31
 VMR_FILE=$(basename $VMR_PATH)
-ALL_FASTA=./fasta_new_vmr_$EA.fa
-FASTA_DIR=./fasta_new_vmr_$EA
+ALL_FASTA=./fasta_new_vmr_${EA}.fa
+FASTA_DIR=./fasta_new_vmr_${EA}
 SRC_DIR=$(dirname $ALL_FASTA)
-BLASTDB=./blast/ICTV_VMR_$EA
-FIRST_FASTA=$(awk  'BEGIN{FS="\t";GENUS=25;ACC=6}(NR>1){print $GENUS"/"$ACC".fa"}' $ACCESSION_TSV|head -1)
-OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=25;ACC=6}(NR>1){print $GENUS"/"$ACC}'      $ACCESSION_TSV|head -1)
 
-#
-# echo params
-#
-echo "EA=$EA"
+##### QQQ scan for _NUC_ and _PROT_ and change to prefix
+
+# NUC db
+NUC_ALL_FASTA=./fasta_new_vmr_${EA}.fna
+NUC_BLASTDB=./blast/ICTV_VMR_${EA}_nuc
+NUC_FIRST_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7".fna"}' $ACCESSION_TSV|head -1)
+NUC_OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7"_nuc"}' $ACCESSION_TSV|head -1)
+
+# PROT db
+PROT_ALL_FASTA=./fasta_new_vmr_${EA}.faa
+PROT_BLASTDB=./blast/ICTV_VMR_${EA}_prot
+PROT_FIRST_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7".faa"}' $ACCESSION_TSV|head -1)
+PROT_OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7"_prot"}' $ACCESSION_TSV|head -1)
+
+
+cat <<EOF
+# ======================================================================
+# 
+# parse/echo paramters
+# 
+# ======================================================================
+EOF
+echo "# -- GENERAL --"
+echo "EA=${EA}"
 echo "ACCESSION_TSV=$ACCESSION_TSV"
 echo "VMR_PATH=$VMR_PATH"
 echo "VMR_FILE=$VMR_FILE"
-echo "ALL_FASTA=$ALL_FASTA"
-echo "SRC_DIR=$SRC_DIR"
-echo "BLASTDB=$BLASTDB"
-echo "FIRST_FASTA=$FIRST_FASTA"
-echo "OUT_FILEPATH=$OUT_FILEPATH"
+echo "# ---- NUC ----"
+echo "NUC_ALL_FASTA=$NUC_ALL_FASTA"
+echo "NUC_BLASTDB=$NUC_BLASTDB"
+echo "NUC_FIRST_FASTA=$NUC_FIRST_FASTA"
+echo "NUC_OUT_FILEPATH=$NUC_OUT_FILEPATH"
+echo "# ---- PROT ---"
+echo "PROT_ALL_FASTA=$PROT_ALL_FASTA"
+echo "PROT_BLASTDB=$PROT_BLASTDB"
+echo "PROT_FIRST_FASTA=$PROT_FIRST_FASTA"
+echo "PROT_OUT_FILEPATH=$PROT_OUT_FILEPATH"
 
 #
 # more validatation
@@ -104,6 +108,7 @@ if [ ! -e "$ACCESSION_TSV" ]; then
     echo "    ./VMR_to_fasta.py -ea $EA -mode fasta  -email \$USER@uab.edu -verbose"
     exit 1
 fi
+
 
 #
 # check for failed downloads
@@ -122,53 +127,111 @@ fi
 # 
 # check column numbers
 #
-COL_HEADER=$(head -1 $ACCESSION_TSV | cut -f $TSV_COL_ACC)
-if [[ "$COL_HEADER" != "Accession" ]]; then
-	echo "ERROR: ${ACCESSION_TSV} col $TSV_COL_ACC is '$COL_HEADER' not 'Accession'"
+COL_NAME="Accession"
+COL_NUM=$TSV_COL_ACC
+COL_HEADER=$(head -1 $ACCESSION_TSV | cut -f $COL_NUM)
+if [[ "$COL_HEADER" != "$COL_NAME" ]]; then
+	echo "ERROR: ${ACCESSION_TSV} col $COL_NUM is '$COL_HEADER' not '$COL_NAME'"
 	exit 1
 else
-	echo "OK: ${ACCESSION_TSV} col $TSV_COL_ACC is '$COL_HEADER'"
+	echo "OK: ${ACCESSION_TSV} col $COL_NUM is '$COL_HEADER'"
 fi
 
-COL_HEADER=$(head -1 $ACCESSION_TSV | cut -f $TSV_COL_GENUS)
-if [[ "$COL_HEADER" != "Genus" ]]; then
-	echo "OK: ${ACCESSION_TSV} col $TSV_COL_GENUS is '$COL_HEADER' not 'Genus'"
+COL_NAME="Genus"
+COL_NUM=$TSV_COL_GENUS
+COL_HEADER=$(head -1 $ACCESSION_TSV | cut -f $COL_NUM)
+if [[ "$COL_HEADER" != "$COL_NAME" ]]; then
+	echo "ERROR: ${ACCESSION_TSV} col $COL_NUM is '$COL_HEADER' not '$COL_NAME'"
 	exit 1
 else
-	echo "ERROR: ${ACCESSION_TSV} col $TSV_COL_GENUS is '$COL_HEADER'"
+	echo "OK: ${ACCESSION_TSV} col $COL_NUM is '$COL_HEADER'"
 fi
-COL_HEADER=$(head -1 $ACCESSION_TSV | cut -f $TSV_COL_FASTA)
-if [[ "$COL_HEADER" != "accession_fa_file_name" ]]; then
-	echo "ERROR: ${ACCESSION_TSV} col $TSV_COL_GENUS is '$COL_HEADER' not 'accession_fa_file_name'"
+
+COL_NAME="accession_aa_fasta"
+COL_NUM=$TSV_COL_FASTA_PROT
+COL_HEADER=$(head -1 $ACCESSION_TSV | cut -f $COL_NUM)
+if [[ "$COL_HEADER" != "$COL_NAME" ]]; then
+	echo "ERROR: ${ACCESSION_TSV} col $COL_NUM is '$COL_HEADER' not '$COL_NAME'"
 	exit 1
 else
-	echo "OK: ${ACCESSION_TSV} col $TSV_COL_GENUS is '$COL_HEADER'"
+	echo "OK: ${ACCESSION_TSV} col $COL_NUM is '$COL_HEADER'"
 fi
 
 
-ACCESSION_COUNT=$(tail -n +2 $ACCESSION_TSV | grep -v nan.fa | wc -l)
-echo "# concatenate all $ACCESSION_COUNT formatted fastas "
-echo "# from $SRC_DIR into $ALL_FASTA"
-echo "cut -f $TSV_COL_FASTA $ACCESSION_TSV | tail -n +2 | grep -v nan.fa | xargs cat > $ALL_FASTA"
-cut -f $TSV_COL_FASTA $ACCESSION_TSV | tail -n +2 | grep -v nan.fa | xargs cat > $ALL_FASTA
-ls -lsh $ALL_FASTA
-echo "# sequences: $(grep -c ">" $ALL_FASTA)"
+COL_NAME="accession_nt_fasta"
+COL_NUM=$TSV_COL_FASTA_NUC
+COL_HEADER=$(head -1 $ACCESSION_TSV | cut -f $COL_NUM)
+if [[ "$COL_HEADER" != "$COL_NAME" ]]; then
+	echo "ERROR: ${ACCESSION_TSV} col $COL_NUM is '$COL_HEADER' not '$COL_NAME'"
+	exit 1
+else
+	echo "OK: ${ACCESSION_TSV} col $COL_NUM is '$COL_HEADER'"
+fi
 
-echo " "
-echo "# Make the BLAST database"
+#
+# merge fastas to build fasta_all
+#
+cat <<EOF
+# ======================================================================
+#
+# concatenate all $ACCESSION_COUNT formatted fastas 
+#
+# ======================================================================
+EOF
+echo "# -- PROT ----------"
+echo "cut -f $TSV_COL_FASTA_PROT $ACCESSION_TSV | tail -n +2 | grep -v nan.fa | xargs cat > $PROT_ALL_FASTA"
+cut -f $TSV_COL_FASTA_PROT $ACCESSION_TSV | tail -n +2 |  grep -v nan.fa |xargs cat > $PROT_ALL_FASTA
+ls -lsh $PROT_ALL_FASTA
+echo "# sequences: $(grep -c ">" $PROT_ALL_FASTA)"
+echo "# -- NUC ----------"
+echo "cut -f $TSV_COL_FASTA_NUC $ACCESSION_TSV | tail -n +2 | grep -v nan.fa | xargs cat > $NUC_ALL_FASTA"
+cut -f $TSV_COL_FASTA_NUC $ACCESSION_TSV | tail -n +2 |  grep -v nan.fa |xargs cat > $NUC_ALL_FASTA
+ls -lsh $NUC_ALL_FASTA
+echo "# sequences: $(grep -c ">" $NUC_ALL_FASTA)"
+
+cat <<EOF
+# ======================================================================
+# 
+# Make the BLAST database
+# 
+# ======================================================================
+EOF
 if [ "$(which makeblastdb 2>/dev/null)" == "" ]; then 
     echo "module load BLAST"
     module load BLAST
 fi
+echo "# -- NUC --"
+cat <<EOF 
+makeblastdb -in $NUC_ALL_FASTA -input_type "fasta" -title "ICTV $VMR_FILE [$EA] genomic" -out "$NUC_BLASTDB" -dbtype "nucl"
+EOF
+makeblastdb -in $NUC_ALL_FASTA -input_type "fasta" -title "ICTV $VMR_FILE [$EA] genomic" -out "$NUC_BLASTDB" -dbtype "nucl"
+echo "# -- PROT --"
+cat <<EOF
+makeblastdb -in $PROT_ALL_FASTA -input_type "fasta" -title "ICTV $VMR_FILE [$EA] protein" -out "$PROT_BLASTDB" -dbtype "prot"
+EOF
+makeblastdb -in $PROT_ALL_FASTA -input_type "fasta" -title "ICTV $VMR_FILE [$EA] protein" -out "$PROT_BLASTDB" -dbtype "prot"
 
-echo 'makeblastdb -in $ALL_FASTA -input_type "fasta" -title "ICTV $VMR_FILE ($EA)" -out "$BLASTDB" -dbtype "nucl"'
-makeblastdb -in $ALL_FASTA -input_type "fasta" -title "ICTV $VMR_FILE ($EA)" -out "$BLASTDB" -dbtype "nucl"
 
-echo "# Example usage:"
-echo "# mkdir -p ./results/$EA/$(dirname $OUT_FILEPATH)"
-echo "# CSV output"
-echo "# blastn -db $BLASTDB -query $FASTA_DIR/$FIRST_FASTA -out ./results/$EA/${OUT_FILEPATH}.csv -outfmt '7 delim=,'"
-echo "# HTML output"
-echo "# blastn -db $BLASTDB -query $FASTA_DIR/$FIRST_FASTA -out ./results/$EA/${OUT_FILEPATH}.asn -outfmt '11'"
-echo "# blast_formatter -archive ./results/$EA/${OUT_FILEPATH}.asn -out ./results/$EA/${OUT_FILEPATH}.html -html"
+echo <<EOF
+# ======================================================================
+# 
+# Example usage:
+# 
+# ======================================================================
+# -- NUC --
+mkdir -p ./results/$EA/$(dirname $NUC_OUT_FILEPATH)
+# direct to CSV output
+blastn -db $NUC_BLASTDB -query $fasta_dir/$NUC_FIRST_FASTA -out ./results/$EA/${NUC_OUT_FILEPATH}.csv -outfmt '7 delim=,' 
+# HTML output via ASN
+blastn -db $NUC_BLASTDB -query $fasta_dir/$NUC_FIRST_FASTA -out ./results/$EA/${NUC_OUT_FILEPATH}.asn -outfmt '11' 
+blast_formatter -archive ./results/$EA/${NUC_OUT_FILEPATH}.asn -out ./results/$EA/${NUC_OUT_FILEPATH}.html -html
+# -- PROT --
+mkdir -p ./results/$EA/$(dirname $PROT_OUT_FILEPATH)
+# direct to CSV output
+blastp -db $PROT_BLASTDB -query $fasta_dir/$PROT_FIRST_FASTA -out ./results/$EA/${PROT_OUT_FILEPATH}.csv -outfmt '7 delim=,'
+# HTML output via ASN
+blastp -db $PROT_BLASTDB -query $fasta_dir/$PROT_FIRST_FASTA -out ./results/$EA/${PROT_OUT_FILEPATH}.asn -outfmt '11'
+blast_formatter -archive ./results/$EA/${PROT_OUT_FILEPATH}.asn -out ./results/$EA/${PROT_OUT_FILEPATH}.html -html
+
+EOF
 

@@ -27,6 +27,10 @@ To create conda environments:
 <h2>Quick Start/Test</h2>
 
 ```
+# clone repo
+git clone git@github.com:ICTV-Virus-Knowledgebase/ICTVtaxablast.git ICTVtaxablastp
+cd !$
+
 # setup env
 ./create_conda_env.sh
 conda activate conda/vmr
@@ -37,15 +41,39 @@ conda activate conda/vmr
 # fetch fastas from NCBI and reformat headers
 ./VMR_to_fasta.py -mode fasta -ea b -email $USER@uab.edu -v
 
-# build blastdb
+# QC download - compare accessions in .fna/.faa to VMR accession lists
+diff --color <(cut -f 6 processed_accessions_b.tsv | tail -n +2 |sort) <(find fasta_new_vmr_b -name "*.fna" -exec grep ">" {} + | cut -d / -f 3 | cut -d . -f 1| sort)
+diff --color <(cut -f 1 processed_proteins.tsv     | tail -n +2 |sort) <(find fasta_new_vmr_b -name "*.faa" -exec grep ">" {} + | cut -d / -f 3 | cut -d . -f 1| sort)
+
+# build blastdb databases (prot and nuc)
 ./makedatabase.sh
 
 # search test sequences
 ./version_git.sh
-./seqsearch -indir test_data/regression -out test_out/regression
 
-# compare results to expected
-diff -w -u test_out/regression/tax_results.json.good test_out/regression/tax_results.json|dwdiff -u --color
+#
+# test each search task, and diff expected results
+#
+DB=nuc;IN=$DB;TASK=blastn
+./taxablast -task $TASK -indir test_data/$IN/ -out test_out/$DB/$TASK/
+diff -w -u test_data/results/$DB/$TASK/tax_results.json test_out/$DB/$TASK/tax_results.json | dwdiff --diff-input --color -P
+
+DB=nuc;IN=$DB;TASK=megablast
+./taxablast -task $TASK -indir test_data/$IN/ -out test_out/$DB/$TASK/
+diff -w -u test_data/results/$DB/$TASK/tax_results.json test_out/$DB/$TASK/tax_results.json | dwdiff --diff-input --color -P
+
+DB=nuc;IN=$DB;TASK=dc-megablast
+./taxablast -task $TASK -indir test_data/$IN/ -out test_out/$DB/$TASK/
+diff -w -u test_data/results/$DB/$TASK/tax_results.json test_out/$DB/$TASK/tax_results.json | dwdiff --diff-input --color -P
+
+DB=prot;IN=$DB;TASK=blastp
+./taxablast -task $TASK -indir test_data/$IN/ -out test_out/$DB/$TASK/
+diff -w -u test_data/results/$DB/$TASK/tax_results.json test_out/$DB/$TASK/tax_results.json | dwdiff --diff-input --color -P
+
+DB=prot;IN=nuc;TASK=blastx
+./taxablast -task $TASK -indir test_data/$IN/ -out test_out/$DB/$TASK/
+diff -w -u test_data/results/$DB/$TASK/tax_results.json test_out/$DB/$TASK/tax_results.json | dwdiff --diff-input --color -P
+
 ```
 
 <h2>Usage - VMR_to_fasta.py</h3>
@@ -89,7 +117,11 @@ Query for something in the test VMR.
 CSV output: 
 ```
 # CSV output (fmt=7)
-blastn -db ./blast/ICTV_VMR_b -query ./fasta_new_vmr_b/Eponavirus/MG711462.fa -out ./results/e/Eponavirus/MG711462.csv  -outfmt '7 delim=,'"
+
+#For blastn
+blastn -db ./blast/ICTV_VMR_b -query ./fasta_new_vmr_b/Eponavirus/MG711462.fna -out ./results/e/Eponavirus/MG711462.csv  -outfmt '7 delim=,'"
+#For blastp
+blastp -db ./blast/ICTV_VMR_b_prot -query ./fasta_new_vmr_b/Kayvirus/AY954969.faa -out ./results/b/Kayvirus/AY954969_prot.csv -outfmt '7 delim=,'
 ```
 
 HTML output: 
