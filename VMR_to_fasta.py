@@ -463,11 +463,15 @@ def fetch_fasta(processed_accession_file_name):
                 os.makedirs(genus_dir)
                 if args.verbose: print(f"Directory '{genus_dir}' created successfully.")
     
-            # check if the raw file exists
-            if os.path.exists(accession_gb):
+            # check if the raw file exists and is non-empty
+            if os.path.exists(accession_gb) and os.path.getsize(accession_gb) > 0:
                 if args.verbose: print("[FETCH]  SKIP NCBI fetch for {accession_gb}".format(**locals()))
             else:
-                if args.verbose: print("[FETCH]  EXEC NCBI fetch for {accession_gb}".format(**locals()))
+                if args.verbose:
+                    if os.path.exists(accession_gb):
+                        print("[FETCH]  REDO NCBI fetch for empty file {accession_gb}".format(**locals()))
+                    else:
+                        print("[FETCH]  EXEC NCBI fetch for {accession_gb}".format(**locals()))
                 try:
                     # fetch GenBank from NCBI
                     fetch_entrez_text("nuccore", accession_ID, "gb", accession_gb, entrez_sleep)
