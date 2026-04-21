@@ -30,7 +30,7 @@ import re
 import sys
 import os
 import pathlib # for stem=basename(.txt)
-from Bio import SeqIO
+import csv
 
 # Class needed to load args from files. 
 class LoadFromFile (argparse.Action):
@@ -59,13 +59,13 @@ if args.mode != 'fasta' and args.mode != "VMR" and args.mode != "db":
 if args.mode == 'fasta':
     print("Importing Entrez from Bio...")
     from Bio import Entrez
+    from Bio import SeqIO
 #Catching error
 if args.mode == "db":
     if args.query == None:
         print("Database Query mode is selected but no fasta file was specified! Please set the '-fasta_file_name' or change mode.",file=sys.stderr)
 
 VMR_file_name_tsv = './vmr.tsv'
-VMR_hack_file_name = "./fixed_vmr_"+args.ea.lower()+".tsv"
 processed_accession_file_name ="./processed_accessions_"+args.ea.lower()+".tsv"
 
 
@@ -141,30 +141,28 @@ def load_VMR_data():
     # it finds every row where 'E' is in column 'Exemplar or additional isolate' and returns 
     # only the columns specified. 
     #vmr_data = truncated_vmr_data.loc[truncated_vmr_data['Exemplar or additional isolate']==args.ea.upper(),['Species Sort','Isolate Sort','Species','Virus GENBANK accession',"Genome coverage","Genus"]]
-    if args.ea.upper() == 'A' or args.ea.upper() == 'E': 
-        vmr_data = raw_vmr_data.loc[raw_vmr_data['Exemplar or additional isolate']==args.ea.upper(),vmr_cols_needed]
+    ea_col = raw_vmr_data['Exemplar or additional isolate'].fillna('').astype(str).str.strip().str.upper()
+    if args.ea.upper() == 'A' or args.ea.upper() == 'E':
+        vmr_data = raw_vmr_data.loc[ea_col==args.ea.upper(),vmr_cols_needed]
     elif args.ea.upper() == 'B':
         # both e and a
-        vmr_data = raw_vmr_data.loc[raw_vmr_data['Exemplar or additional isolate']!='',vmr_cols_needed]
+        vmr_data = raw_vmr_data.loc[ea_col!='',vmr_cols_needed]
 
-    # only works when I reload the vmr_data, probably not necessary. have to look into why it's doing this. 
-    if args.verbose: print("Writing"+VMR_hack_file_name,": workaround - filters VMR down to "+args.ea.upper()+" records only")
+    if args.verbose: print("Filtered VMR down to "+args.ea.upper()+" records")
     if args.verbose: print("\tcolumns: ",vmr_data.columns)
-    
-    vmr_data.to_csv(VMR_hack_file_name, sep='\t')
-    if args.verbose: print("Loading",VMR_hack_file_name)
-    narrow_vmr_data = pd.read_csv(VMR_hack_file_name,sep='\t')
-    if args.verbose: print("   Read {0} rows, {1} columns.".format(*narrow_vmr_data.shape))
-    if args.verbose: print("   columns:", list(narrow_vmr_data.columns))
+    if args.verbose: print("   Filtered: {0} rows, {1} columns.".format(*vmr_data.shape))
 
-    if args.verbose: print("   Truncated: {0} rows, {1} columns.".format(*narrow_vmr_data.shape))
-    
-    return narrow_vmr_data
+    return vmr_data.reset_index(drop=True)
 
 #insert(parse_seg_accession_list)
 def parse_seg_accession_list(isolate_id,acc_list_str):
+    if pd.isna(acc_list_str):
+        return []
+
     # remove whitespace.
-    acc_list_str = acc_list_str.replace(" ","")
+    acc_list_str = str(acc_list_str).replace(" ","")
+    if acc_list_str == '':
+        return []
 
     # instead of trying to split by commas and semicolons, I just replace the commas with semicolons. 
     acc_list_str = acc_list_str.replace(",",";")
@@ -179,6 +177,8 @@ def parse_seg_accession_list(isolate_id,acc_list_str):
     result_arr = [] # list of seg_name-accession maps
     accession_index = 0
     for seg_acc_str in accession_list:
+        if seg_acc_str == '':
+            continue
         if args.tmi: print("seg_acc_str:"+seg_acc_str)
 
         # track accession/segment order, so it can be preserved
@@ -240,25 +240,25 @@ def test_accession_IDs(df):
 # 3. Each Accession Number contains at most 3 letters
 # 4. Accession Numbers in the same block are seperated by a ; or a , or a :
 ##############################################################################################################
-    # defining new DataFrame before hand
-    processed_accessions = pd.DataFrame(columns=[
+    processed_accession_columns = [
         'ICTV_ID','Isolate_ID','Exemplar_Additional','Accession_Index','Segment_Name','Accession', # 0-5
         'Start_Loc','End_Loc','Sort','Isolate_Sort','Original_GENBANK_Accessions','Errors', # 6-11
         'Realm','Subrealm','Kingdom','Subkingdom','Phylum','Subphylum','Class','Subclass','Order','Suborder', # 12-21
         'Family','Subfamily','Genus','Subgenus','Species','Virus_Names' # 22-27
-    ])
+    ]
     # pattern for accessions qualified by "(START,STOP)" subsequence qualifiers
-    accession_start_end_regex = r'(\w+)\s*\((\d+)(\.)(\w+)(\))'
+    accession_start_end_regex = re.compile(r'(\w+)\s*\((\d+)(\.)(\w+)(\))')
+    processed_accession_rows = []
 
     # for loop for every entry in given processed_accessionIDs
-    for entry_count in range(0,len(df.index)):
+    for row in df.to_dict('records'):
         #
         # split accessions list (seporarated by ;  by , )
         #
-        
-        isolate_id_str = str(df['Isolate ID'][entry_count])
+
+        isolate_id_str = str(row['Isolate ID'])
         # get original list of accessions
-        gb_accessions_str = str(df['Virus GENBANK accession'][entry_count])
+        gb_accessions_str = row['Virus GENBANK accession']
         #rs_accessions_str = str(df['Virus REFSEQ accession'][entry_count])
 
         # parse
@@ -276,7 +276,7 @@ def test_accession_IDs(df):
             start_loc=''
             end_loc=''
             # check for accessions followed by (INT,INT) 
-            re_result=re.match(accession_start_end_regex, acc_dict['accession'])
+            re_result=accession_start_end_regex.match(acc_dict['accession'])
 
             if re_result:
                 # accession is qualified - parse out accession from START/STOP nt coords
@@ -287,43 +287,43 @@ def test_accession_IDs(df):
                 # use accession as is
                 processed_accession = acc_dict['accession']
                 
-            processed_accessions.loc[len(processed_accessions.index)] = [
+            processed_accession_rows.append([
                 # 0-5
-                df['ICTV_ID'][entry_count], 
-                df['Isolate ID'][entry_count],
-                df['Exemplar or additional isolate'][entry_count],
+                row['ICTV_ID'],
+                row['Isolate ID'],
+                row['Exemplar or additional isolate'],
                 acc_dict['accession_index'],
                 acc_dict['segment_name'],
                 processed_accession,
                 # 6-11
                 start_loc,
                 end_loc,
-                df['Species Sort'][entry_count],
-                df['Isolate Sort'][entry_count],
-                df['Virus GENBANK accession'][entry_count],
+                row['Species Sort'],
+                row['Isolate Sort'],
+                row['Virus GENBANK accession'],
                 '', # errors
                 # 12-21
-                df['Realm'][entry_count],
-                df['Subrealm'][entry_count],
-                df['Kingdom'][entry_count],
-                df['Subkingdom'][entry_count],
-                df['Phylum'][entry_count],
-                df['Subphylum'][entry_count],
-                df['Class'][entry_count],
-                df['Subclass'][entry_count],
-                df['Order'][entry_count],
-                df['Suborder'][entry_count],
+                row['Realm'],
+                row['Subrealm'],
+                row['Kingdom'],
+                row['Subkingdom'],
+                row['Phylum'],
+                row['Subphylum'],
+                row['Class'],
+                row['Subclass'],
+                row['Order'],
+                row['Suborder'],
                 # 22-27
-                df['Family'][entry_count],
-                df['Subfamily'][entry_count],
-                df['Genus'][entry_count],
-                df['Subgenus'][entry_count],
-                df['Species'][entry_count],
-                df['Virus name(s)'][entry_count],
-            ]
+                row['Family'],
+                row['Subfamily'],
+                row['Genus'],
+                row['Subgenus'],
+                row['Species'],
+                row['Virus name(s)'],
+            ])
             #print("'"+processed_accession+"'"+' has been cleaned.')
 
-    return processed_accessions
+    return pd.DataFrame.from_records(processed_accession_rows, columns=processed_accession_columns)
 
 #######################################################################################################################################
 # Utilizes Biopython's Entrez API to fetch FASTA data from Accession numbers. 
@@ -346,8 +346,8 @@ def fetch_fasta(processed_accession_file_name):
     processed_accessions_fanames_fname=processed_accession_file_name.replace(".tsv","")+".fa_names.tsv"
     #protein accessions file
     processed_protein_accessions_fname="processed_proteins.tsv"
-    with open(processed_protein_accessions_fname, 'w') as f: 
-        f.write("\t".join(["Accession", "Protein_id", "Product_name", "Note", "Codon_start"]) + "\n")
+    processed_protein_columns = ["Accession", "Protein_id", "Product_name", "Note", "Codon_start"]
+    processed_protein_rows = []
     
     #Check to see if fasta data exists and, if it does, loads the accessions numbers from it into an np array.
     if args.verbose: print("  loading:", processed_accession_file_name)
@@ -355,7 +355,7 @@ def fetch_fasta(processed_accession_file_name):
     Accessions = pd.read_csv(processed_accession_file_name,sep='\t')
 
     all_reads = []
-    bad_accessions = pd.DataFrame(columns=Accessions.columns)
+    bad_accessions = []
 
     # NCBI Entrez Session setup
     entrez_sleep = 0.34 # 3 requests per second with email authN
@@ -369,25 +369,22 @@ def fetch_fasta(processed_accession_file_name):
         # use email authN
         if args.verbose: print("NCBI Entrez 3/second with email=",args.email)
 
+    accession_gb_paths = []
+    accession_aa_fasta_paths = []
+    accession_nt_fasta_paths = []
+
     # Fetches FASTA data for every accession number
-    count = 0
-    for accession_ID in Accessions['Accession']:
-            row = Accessions.loc[count].fillna('')
-            Isolate_ID   = row.iloc[1]
-            Isolate_type = row.iloc[2]
-            segment      = row.iloc[4]
-            # accession_ID = row.iloc[6]
-            family_name  = row.iloc[22]
-            genus_name   = row.iloc[24]
-            species_name = row.iloc[26]
-            virus_names  = row.iloc[27]
+    for count, row in enumerate(Accessions.fillna('').to_dict('records')):
+            accession_ID = row['Accession']
+            Isolate_ID   = row['Isolate_ID']
+            Isolate_type = row['Exemplar_Additional']
+            segment      = row['Segment_Name']
+            family_name  = row['Family']
+            genus_name   = row['Genus']
+            species_name = row['Species']
+            virus_names  = row['Virus_Names']
             if args.verbose: print("Fetch [",count,"] ID:",Isolate_ID," Species:",species_name," Segment:",segment," Accession:",accession_ID)
 
-            # emtpy cell becomes float:NaN!
-            if segment != segment:         segment = ""
-            if genus_name != genus_name:   genus_name = ""
-            if family_name != family_name: family_name = ""
-                
             # fasta_file_name
             genus_dir = args.fasta_dir+"/"+str(genus_name)
             if genus_name == "":
@@ -398,10 +395,9 @@ def fetch_fasta(processed_accession_file_name):
 
             bad_protein_len= genus_dir+"/"+str(accession_ID)+"_bad_protein_length.tsv"
             
-            # Assign the computed values to the new columns
-            Accessions.loc[count, "accession_gb"] = accession_gb
-            Accessions.loc[count, "accession_aa_fasta"] = accession_aa_fasta
-            Accessions.loc[count, "accession_nt_fasta"] = accession_nt_fasta
+            accession_gb_paths.append(accession_gb)
+            accession_aa_fasta_paths.append(accession_aa_fasta)
+            accession_nt_fasta_paths.append(accession_nt_fasta)
     
             # make sure dir exists
             if not os.path.exists(genus_dir):
@@ -434,7 +430,7 @@ def fetch_fasta(processed_accession_file_name):
 
                 except:
                     print("    [ERR] Accession ID "+"'"+str(accession_ID)+"'"+" Entrez.efetch threw an error",file=sys.stderr)
-                    bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
+                    bad_accessions.append(row)
 
             # check if processed .faa & .fna fastas are out of date
             if os.path.getsize(accession_gb) == 0:
@@ -470,10 +466,6 @@ def fetch_fasta(processed_accession_file_name):
                     make_nt_file.write("{gb_open.seq}\n".format(**locals()))
                     make_nt_file.close()
                     if args.verbose: print('    wrote: '+accession_nt_fasta)
-                    else:
-                        if args.verbose: print("[FORMAT] SKIP/ERROR no sequence found in {accession_gb}".format(**locals()))
-                        bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
-                        continue
 
                     with open(accession_aa_fasta, "w") as make_aa_file:
                         protein_check = set()
@@ -504,9 +496,8 @@ def fetch_fasta(processed_accession_file_name):
 
 
 
-                                #dataframe for protein accessions and product names
-                                processed_protein_rows = pd.DataFrame( [[accession_ID, protein_id, product_name, note_in_gb, codon_start]], columns=["Accession", "Protein_id", "Product_name", "Note", "Codon_start"] )
-                                processed_protein_rows.to_csv( processed_protein_accessions_fname, sep='\t', index=False, mode='a', header=False )
+                                #data for protein accessions and product names
+                                processed_protein_rows.append([accession_ID, protein_id, product_name, note_in_gb, codon_start])
                                 
                                 sequence = feature.qualifiers["translation"][0] 
                                 protein_tuple = (sequence)
@@ -514,13 +505,13 @@ def fetch_fasta(processed_accession_file_name):
                                 #CDS number of nucleotides check
                                 seq_in_nt= len(feature.location)
                                 seq_test= seq_in_nt/3
-                                len_report_df= pd.DataFrame(columns=["Accession_ID",'Nucleotide_length','Protein_length','Match', "Protein_id"])
                                 if seq_test != seq_in_protein:
                                     len_match= "NO"
                                 else:
                                     len_match= "YES"
-                                len_report_rows= pd.DataFrame([[accession_ID,seq_in_nt,seq_in_protein,len_match, protein_id]])
-                                pd.DataFrame.to_csv(len_report_rows,make_bad_protein_len,sep='\t',index=False,header=len_report_df.columns)
+                                len_report_writer = csv.writer(make_bad_protein_len, delimiter='\t')
+                                len_report_writer.writerow(["Accession_ID",'Nucleotide_length','Protein_length','Match', "Protein_id"])
+                                len_report_writer.writerow([accession_ID,seq_in_nt,seq_in_protein,len_match, protein_id])
 
                                 make_bad_protein_len.close()
                                
@@ -531,19 +522,23 @@ def fetch_fasta(processed_accession_file_name):
                         if args.verbose: print('    wrote: '+accession_aa_fasta, " with ", len(protein_check), " CDS records")
                 else:
                     if args.verbose: print("[FORMAT] SKIP/ERROR no sequence found in {accession_gb}".format(**locals()))
-                    bad_accessions = pd.concat([bad_accessions, pd.DataFrame([row])], ignore_index=True)
+                    bad_accessions.append(row)
                     continue
 
-            # count number of accessions processed
-            count=count+1
-
     # output accession table, WITH fasta filenames
+    Accessions["accession_gb"] = accession_gb_paths
+    Accessions["accession_aa_fasta"] = accession_aa_fasta_paths
+    Accessions["accession_nt_fasta"] = accession_nt_fasta_paths
     pd.DataFrame.to_csv(Accessions,processed_accessions_fanames_fname,sep='\t',index=False)
     print("Wrote to {0} rows, {1} columns to {2}".format(*Accessions.shape,processed_accessions_fanames_fname) )
 
+    pd.DataFrame.from_records(processed_protein_rows, columns=processed_protein_columns).to_csv(
+        processed_protein_accessions_fname, sep='\t', index=False
+    )
+
     # wrap up and report errors
-    print("Bad_Accession count:", len(bad_accessions.index))
-    pd.DataFrame.to_csv(bad_accessions,bad_accessions_fname,sep='\t',index=False)
+    print("Bad_Accession count:", len(bad_accessions))
+    pd.DataFrame.from_records(bad_accessions, columns=Accessions.columns).to_csv(bad_accessions_fname,sep='\t',index=False)
     print("Wrote to ", bad_accessions_fname)
 
     
@@ -630,9 +625,6 @@ if args.verbose: print("# {0} Done.".format(formatElapsedTime()))
 
 
     
-
-
-
 
 
 
