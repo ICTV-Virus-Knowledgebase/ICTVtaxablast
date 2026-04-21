@@ -52,6 +52,7 @@ parser.add_argument("-ea",help="Fetch E or A records (Exemplars or AdditionalIso
 parser.add_argument("-VMR_file_name",help="name of the VMR file to load.",default="VMR_E_data.xlsx")
 parser.add_argument("-fasta_dir",help="Directory to store downloaded fasta cache", default="./fasta_new_vmr_b" )
 parser.add_argument("-query",help="Name of the fasta file to query the database")
+parser.add_argument("-k", "--keep-going", help="log per-accession errors and continue in fasta mode", action="store_true")
 args = parser.parse_args()
 if args.mode != 'fasta' and args.mode != "VMR" and args.mode != "db":
     print("Valid mode not selected. Options: VMR,fasta,db",file=sys.stderr)
@@ -60,6 +61,7 @@ if args.mode == 'fasta':
     print("Importing Entrez from Bio...")
     from Bio import Entrez
     from Bio import SeqIO
+    from Bio.Seq import UndefinedSequenceError
 #Catching error
 if args.mode == "db":
     if args.query == None:
@@ -325,6 +327,52 @@ def test_accession_IDs(df):
 
     return pd.DataFrame.from_records(processed_accession_rows, columns=processed_accession_columns)
 
+def sanitize_filename(value):
+    return re.sub(r'[^A-Za-z0-9_.-]+', '_', str(value))
+
+def fetch_entrez_text(db, accession_ID, rettype, output_file_name, entrez_sleep):
+    handle = Entrez.efetch(db=db, id=accession_ID, rettype=rettype, retmode="text")
+    time.sleep(entrez_sleep)
+    raw_text = handle.read()
+    handle.close()
+    with open(output_file_name, 'w') as raw_file:
+        raw_file.write(raw_text)
+    return raw_text
+
+def fetch_contig_sequence(contig_accession, genus_dir, entrez_sleep):
+    contig_fasta = os.path.join(genus_dir, sanitize_filename(contig_accession)+".fna")
+    if not os.path.exists(contig_fasta):
+        if args.verbose: print("[FETCH]  EXEC NCBI fetch for CONTIG {0}".format(contig_accession))
+        fetch_entrez_text("nuccore", contig_accession, "fasta", contig_fasta, entrez_sleep)
+    elif args.verbose:
+        print("[FETCH]  SKIP NCBI fetch for {0}".format(contig_fasta))
+
+    contig_record = SeqIO.read(contig_fasta, "fasta")
+    return str(contig_record.seq)
+
+def sequence_from_genbank_record(gb_record, accession_ID, genus_dir, entrez_sleep):
+    try:
+        return str(gb_record.seq)
+    except UndefinedSequenceError:
+        contig = gb_record.annotations.get("contig")
+        if not contig:
+            raise
+
+        contig_parts = re.findall(r'([A-Za-z0-9_.]+):(\d+)\.\.(\d+)', contig)
+        if len(contig_parts) == 0:
+            raise ValueError("undefined sequence for {0}; unsupported CONTIG expression: {1}".format(accession_ID, contig))
+
+        sequence_parts = []
+        for contig_accession, start_str, end_str in contig_parts:
+            contig_seq = fetch_contig_sequence(contig_accession, genus_dir, entrez_sleep)
+            start = int(start_str) - 1
+            end = int(end_str)
+            sequence_parts.append(contig_seq[start:end])
+
+        if args.verbose:
+            print("[FORMAT] Resolved undefined sequence for {0} from CONTIG {1}".format(accession_ID, contig))
+        return ''.join(sequence_parts)
+
 #######################################################################################################################################
 # Utilizes Biopython's Entrez API to fetch FASTA data from Accession numbers. 
 # Prints Accession Numbers that failed to 'clean' correctly
@@ -356,6 +404,16 @@ def fetch_fasta(processed_accession_file_name):
 
     all_reads = []
     bad_accessions = []
+
+    def handle_accession_error(row, message, exception=None):
+        error_row = dict(row)
+        error_row["Errors"] = message
+        bad_accessions.append(error_row)
+        print("    [ERR] {0}".format(message), file=sys.stderr)
+        if not args.keep_going:
+            if exception is not None:
+                raise exception
+            raise RuntimeError(message)
 
     # NCBI Entrez Session setup
     entrez_sleep = 0.34 # 3 requests per second with email authN
@@ -409,43 +467,45 @@ def fetch_fasta(processed_accession_file_name):
             if os.path.exists(accession_gb):
                 if args.verbose: print("[FETCH]  SKIP NCBI fetch for {accession_gb}".format(**locals()))
             else:
-                raw_file = open(accession_gb,'w')
-                
                 if args.verbose: print("[FETCH]  EXEC NCBI fetch for {accession_gb}".format(**locals()))
                 try:
-                    # fetch FASTA from NCBI
-                    handle = Entrez.efetch(db="nuccore", id=accession_ID, rettype="gb", retmode="text")
-
-                    # limit requests: 3/second with email, 10/second with API_KEY
-                    time.sleep(entrez_sleep)
-
-                    # prints out accession that got though cleaning
+                    # fetch GenBank from NCBI
+                    fetch_entrez_text("nuccore", accession_ID, "gb", accession_gb, entrez_sleep)
                     if args.verbose: print('    .gb for '+accession_ID+ ' obtained.')
-
-                    # prints out accession that got though cleaning
-                    raw_gb = handle.read()
-                    raw_file.write(raw_gb);
-                    raw_file.close()
                     if args.verbose: print('    wrote: '+accession_gb)
 
-                except:
-                    print("    [ERR] Accession ID "+"'"+str(accession_ID)+"'"+" Entrez.efetch threw an error",file=sys.stderr)
-                    bad_accessions.append(row)
+                except Exception as e:
+                    handle_accession_error(
+                        row,
+                        "Accession ID '{0}' Entrez.efetch threw an error: {1}".format(accession_ID, e),
+                        e
+                    )
+                    continue
 
             # check if processed .faa & .fna fastas are out of date
             if os.path.getsize(accession_gb) == 0:
-                        if args.verbose: print("[FORMAT] SKIP/ERROR complete record files is empty for {accession_gb}".format(**locals()))
+                        handle_accession_error(row, "complete record file is empty: {0}".format(accession_gb))
+                        continue
             else:
 #            elif os.path.exists(accession_fa_file_name) and os.path.getmtime(accession_fa_file_name) > os.path.getmtime(accession_raw_file_name):
 #                if args.verbose: print("[FORMAT] SKIP reformat header for {accession_fa_file_name}".format(**locals()))
 #            else:
 #                if args.verbose: print("[FORMAT] EXEC reformat header for {accession_fa_file_name}".format(**locals()))
                 
-                # open genbank file
-                gb_open = open(accession_gb,"r")
-                #read using SeqIO
-                gb_open = SeqIO.read(gb_open, "genbank")
-                if gb_open.seq:
+                try:
+                    # open genbank file and read using SeqIO
+                    with open(accession_gb,"r") as gb_file:
+                        gb_open = SeqIO.read(gb_file, "genbank")
+                    nt_sequence = sequence_from_genbank_record(gb_open, accession_ID, genus_dir, entrez_sleep)
+                except Exception as e:
+                    handle_accession_error(
+                        row,
+                        "failed to parse sequence for accession {0} from {1}: {2}".format(accession_ID, accession_gb, e),
+                        e
+                    )
+                    continue
+
+                if nt_sequence:
                     make_nt_file= open(accession_nt_fasta,'w')
                     
                     # Build FASTA header
@@ -463,7 +523,7 @@ def fetch_fasta(processed_accession_file_name):
 
 
                     # sequence line of .fna file in fasta format
-                    make_nt_file.write("{gb_open.seq}\n".format(**locals()))
+                    make_nt_file.write("{0}\n".format(nt_sequence))
                     make_nt_file.close()
                     if args.verbose: print('    wrote: '+accession_nt_fasta)
 
@@ -521,8 +581,7 @@ def fetch_fasta(processed_accession_file_name):
                                
                         if args.verbose: print('    wrote: '+accession_aa_fasta, " with ", len(protein_check), " CDS records")
                 else:
-                    if args.verbose: print("[FORMAT] SKIP/ERROR no sequence found in {accession_gb}".format(**locals()))
-                    bad_accessions.append(row)
+                    handle_accession_error(row, "no sequence found in {0}".format(accession_gb))
                     continue
 
     # output accession table, WITH fasta filenames
@@ -625,6 +684,3 @@ if args.verbose: print("# {0} Done.".format(formatElapsedTime()))
 
 
     
-
-
-
