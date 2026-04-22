@@ -42,10 +42,18 @@ conda activate conda/vmr
 ./VMR_to_fasta.py -mode fasta -ea b -email $USER@uab.edu -v
 
 # QC download - compare accessions in .fna/.faa to VMR accession lists
-diff --color <(cut -f 6 processed_accessions_b.tsv | tail -n +2 |sort) <(find fasta_new_vmr_b -name "*.fna" -exec grep ">" {} + | cut -d / -f 3 | cut -d . -f 1| sort)
-diff --color <(cut -f 1 processed_proteins.tsv     | tail -n +2 |sort) <(find fasta_new_vmr_b -name "*.faa" -exec grep ">" {} + | cut -d / -f 3 | cut -d . -f 1| sort)
+diff --color <(cut -f 6 processed_accessions_b.tsv | tail -n +2 |sort) <(find fasta_new_vmr_b -name "*.gb" -exec awk '/^ACCESSION/{print $2}' {} +| sort )
+# QC protein extraction - not quite consistent, yet....
+diff --color <(cut -f 2 processed_proteins.tsv     | tail -n +2 | cut -d . -f 1 | sort |uniq) <(find fasta_new_vmr_b -name "*.faa" -exec grep ">" {} + | cut -d - -f 4 | cut -d . -f 1  | sort | uniq )
+echo "count processed_proteins.tsv: "\
+    "total=$(cut -f 2 processed_proteins.tsv     | tail -n +2 | cut -d . -f 1| wc -l), "\
+    " unique=$(cut -f 2 processed_proteins.tsv     | tail -n +2 | cut -d . -f 1 | sort |uniq | wc -l )"
+echo "count protein_id in *.faa: "\
+    " total=$(find fasta_new_vmr_b -name '*.faa' -exec grep '>' {} + | cut -d - -f 4 | cut -d . -f 1|wc -l), " \
+    " unique=$(find fasta_new_vmr_b -name '*.faa' -exec grep '>' {} + | cut -d - -f 4 | cut -d . -f 1  | sort | uniq | wc -l)"
 
-# build blastdb databases (prot and nuc)
+
+# build db databases (prot and nuc)
 ./makedatabase.sh
 
 # search test sequences
