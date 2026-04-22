@@ -157,6 +157,23 @@ def load_VMR_data():
     return vmr_data.reset_index(drop=True)
 
 #insert(parse_seg_accession_list)
+def normalize_accession(isolate_id, accession):
+    if accession.endswith('.'):
+        normalized_accession = accession.rstrip('.')
+        return (
+            normalized_accession,
+            "stripped trailing '.' from accession '{0}' -> '{1}'".format(accession, normalized_accession)
+        )
+
+    normalized_accession = re.sub(r'\.\d+$', '', accession)
+    if normalized_accession != accession:
+        return (
+            normalized_accession,
+            "stripped accession version suffix from '{0}' -> '{1}'".format(accession, normalized_accession)
+        )
+
+    return accession, ""
+
 def parse_seg_accession_list(isolate_id,acc_list_str):
     if pd.isna(acc_list_str):
         return []
@@ -195,14 +212,14 @@ def parse_seg_accession_list(isolate_id,acc_list_str):
         else:
             if len(seg_acc_pair)==1:
                 # bare accession
-                accession = seg_acc_pair[0]
-                result_arr.append({"accession":accession, "segment_name":None, "accession_index":accession_index, "isolate_id":isolate_id})
+                accession, accession_error = normalize_accession(isolate_id, seg_acc_pair[0])
+                result_arr.append({"accession":accession, "segment_name":None, "accession_index":accession_index, "isolate_id":isolate_id, "error":accession_error})
                 if args.tmi: print("result_arr["+str(accession_index)+"]:"+str(result_arr[accession_index-1]))
             elif len(seg_acc_pair)==2:
                 # seg_name:accession
                 segment_name = seg_acc_pair[0]
-                accession = seg_acc_pair[1]
-                result_arr.append({"accession":accession, "segment_name":segment_name, "accession_index":accession_index, "isolate_id":isolate_id})
+                accession, accession_error = normalize_accession(isolate_id, seg_acc_pair[1])
+                result_arr.append({"accession":accession, "segment_name":segment_name, "accession_index":accession_index, "isolate_id":isolate_id, "error":accession_error})
                 if args.tmi: print("result_arr["+str(accession_index)+"]:"+str(result_arr[accession_index-1]))
 
             # QC accessions
@@ -249,7 +266,7 @@ def test_accession_IDs(df):
         'Family','Subfamily','Genus','Subgenus','Species','Virus_Names' # 22-27
     ]
     # pattern for accessions qualified by "(START,STOP)" subsequence qualifiers
-    accession_start_end_regex = re.compile(r'(\w+)\s*\((\d+)(\.)(\w+)(\))')
+    accession_start_end_regex = re.compile(r'([A-Za-z0-9_]+(?:\.\d+|\.)?)\s*\((\d+)(\.)(\w+)(\))')
     processed_accession_rows = []
 
     # for loop for every entry in given processed_accessionIDs
@@ -282,12 +299,17 @@ def test_accession_IDs(df):
 
             if re_result:
                 # accession is qualified - parse out accession from START/STOP nt coords
-                processed_accession= re_result.group(1)
+                processed_accession, range_accession_error = normalize_accession(isolate_id_str, re_result.group(1))
                 start_loc= re_result.group(2)
                 end_loc  = re_result.group(4)
             else:
                 # use accession as is
                 processed_accession = acc_dict['accession']
+                range_accession_error = ""
+
+            accession_errors = "; ".join(
+                error for error in [acc_dict.get("error", ""), range_accession_error] if error
+            )
                 
             processed_accession_rows.append([
                 # 0-5
@@ -303,7 +325,7 @@ def test_accession_IDs(df):
                 row['Species Sort'],
                 row['Isolate Sort'],
                 row['Virus GENBANK accession'],
-                '', # errors
+                accession_errors, # errors
                 # 12-21
                 row['Realm'],
                 row['Subrealm'],
@@ -428,7 +450,9 @@ def fetch_fasta(processed_accession_file_name):
     Accessions = pd.read_csv(processed_accession_file_name,sep='\t')
 
     all_reads = []
-    bad_accessions = []
+    bad_accessions = Accessions.loc[
+        Accessions["Errors"].fillna("").astype(str).str.strip() != ""
+    ].fillna("").to_dict("records")
 
     def handle_accession_error(row, message, exception=None):
         error_row = dict(row)
@@ -707,6 +731,12 @@ def main():
         if args.verbose: print("Writing", processed_accession_file_name)
         if args.verbose: print("\tColumn: ", tested_accessions_ids.columns)
         pd.DataFrame.to_csv(tested_accessions_ids,processed_accession_file_name,sep='\t',index=False)
+
+        bad_accessions_fname="./bad_accessions_"+args.ea.lower()+".tsv"
+        accession_warning_rows = tested_accessions_ids.loc[
+            tested_accessions_ids["Errors"].fillna("").astype(str).str.strip() != ""
+        ]
+        pd.DataFrame.to_csv(accession_warning_rows,bad_accessions_fname,sep='\t',index=False)
 
     if args.mode == "fasta" or None:
         print("# {0} pull FASTAs from NCBI".format(formatElapsedTime()))
