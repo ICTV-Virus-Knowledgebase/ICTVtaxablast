@@ -373,6 +373,31 @@ def sequence_from_genbank_record(gb_record, accession_ID, genus_dir, entrez_slee
             print("[FORMAT] Resolved undefined sequence for {0} from CONTIG {1}".format(accession_ID, contig))
         return ''.join(sequence_parts)
 
+def parse_accession_range(row, accession_ID, sequence_length):
+    start_loc = str(row.get("Start_Loc", "")).strip()
+    end_loc = str(row.get("End_Loc", "")).strip()
+    if start_loc == "" and end_loc == "":
+        return None
+    if start_loc == "" or end_loc == "":
+        raise ValueError("accession {0} has incomplete range: start={1}, end={2}".format(accession_ID, start_loc, end_loc))
+
+    start = int(float(start_loc))
+    end = int(float(end_loc))
+    if start < 1 or end < start:
+        raise ValueError("accession {0} has invalid range: start={1}, end={2}".format(accession_ID, start, end))
+    if end > sequence_length:
+        raise ValueError("accession {0} range end {1} exceeds sequence length {2}".format(accession_ID, end, sequence_length))
+
+    return {"start": start, "end": end, "start0": start - 1, "end0": end}
+
+def feature_contained_in_range(feature, accession_range):
+    if accession_range is None:
+        return True
+
+    feature_start = int(feature.location.start)
+    feature_end = int(feature.location.end)
+    return feature_start >= accession_range["start0"] and feature_end <= accession_range["end0"]
+
 #######################################################################################################################################
 # Utilizes Biopython's Entrez API to fetch FASTA data from Accession numbers. 
 # Prints Accession Numbers that failed to 'clean' correctly
@@ -501,6 +526,7 @@ def fetch_fasta(processed_accession_file_name):
                     with open(accession_gb,"r") as gb_file:
                         gb_open = SeqIO.read(gb_file, "genbank")
                     nt_sequence = sequence_from_genbank_record(gb_open, accession_ID, genus_dir, entrez_sleep)
+                    accession_range = parse_accession_range(row, accession_ID, len(nt_sequence))
                 except Exception as e:
                     handle_accession_error(
                         row,
@@ -510,6 +536,16 @@ def fetch_fasta(processed_accession_file_name):
                     continue
 
                 if nt_sequence:
+                    output_nt_sequence = nt_sequence
+                    if accession_range is not None:
+                        output_nt_sequence = nt_sequence[accession_range["start0"]:accession_range["end0"]]
+                        if args.verbose:
+                            print("[FORMAT] Trimming {0} to {1}..{2}".format(
+                                accession_ID,
+                                accession_range["start"],
+                                accession_range["end"]
+                            ))
+
                     make_nt_file= open(accession_nt_fasta,'w')
                     
                     # Build FASTA header
@@ -527,7 +563,7 @@ def fetch_fasta(processed_accession_file_name):
 
 
                     # sequence line of .fna file in fasta format
-                    make_nt_file.write("{0}\n".format(nt_sequence))
+                    make_nt_file.write("{0}\n".format(output_nt_sequence))
                     make_nt_file.close()
                     if args.verbose: print('    wrote: '+accession_nt_fasta)
 
@@ -535,6 +571,8 @@ def fetch_fasta(processed_accession_file_name):
                         protein_check = set()
                         for feature in gb_open.features:
                             if feature.type == "CDS" and "translation" in feature.qualifiers:
+                                if not feature_contained_in_range(feature, accession_range):
+                                    continue
                 # Build FASTA header for protein
                                 protein_id = feature.qualifiers.get("protein_id", ["unknown_protein"])[0]
                                 
