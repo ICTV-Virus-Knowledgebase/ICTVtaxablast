@@ -54,7 +54,7 @@ echo "count protein_id in *.faa: "\
 
 
 # build db databases (prot and nuc)
-./makedatabase.sh
+./makedatabase.sh -i VMRs/VMR_MSL40.v1.20250307_test_with_longest.xlsx
 
 # search test sequences
 ./version_git.sh
