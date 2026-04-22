@@ -420,6 +420,17 @@ def feature_contained_in_range(feature, accession_range):
     feature_end = int(feature.location.end)
     return feature_start >= accession_range["start0"] and feature_end <= accession_range["end0"]
 
+def print_vmr_stats(vmr_data, processed_accessions):
+    print("# VMR statistics")
+    print("  isolate_ids: {0}".format(vmr_data["Isolate ID"].nunique()))
+    print("  accessions: {0}".format(len(processed_accessions.index)))
+    print("  valid_accessions: {0}".format(processed_accessions["Accession"].fillna("").astype(str).str.strip().ne("").sum()))
+    print("  genome_coverage:")
+    genome_coverage_counts = vmr_data["Genome coverage"].fillna("").astype(str).str.strip().value_counts(dropna=False).sort_index()
+    for genome_coverage, count in genome_coverage_counts.items():
+        label = genome_coverage if genome_coverage != "" else "[blank]"
+        print("    {0}: {1}".format(label, count))
+
 #######################################################################################################################################
 # Utilizes Biopython's Entrez API to fetch FASTA data from Accession numbers. 
 # Prints Accession Numbers that failed to 'clean' correctly
@@ -479,6 +490,9 @@ def fetch_fasta(processed_accession_file_name):
     accession_gb_paths = []
     accession_aa_fasta_paths = []
     accession_nt_fasta_paths = []
+    gb_download_count = 0
+    fna_regenerated_count = 0
+    faa_regenerated_count = 0
 
     # Fetches FASTA data for every accession number
     for count, row in enumerate(Accessions.fillna('').to_dict('records')):
@@ -524,6 +538,7 @@ def fetch_fasta(processed_accession_file_name):
                 try:
                     # fetch GenBank from NCBI
                     fetch_entrez_text("nuccore", accession_ID, "gb", accession_gb, entrez_sleep)
+                    gb_download_count += 1
                     if args.verbose: print('    .gb for '+accession_ID+ ' obtained.')
                     if args.verbose: print('    wrote: '+accession_gb)
 
@@ -589,6 +604,7 @@ def fetch_fasta(processed_accession_file_name):
                     # sequence line of .fna file in fasta format
                     make_nt_file.write("{0}\n".format(output_nt_sequence))
                     make_nt_file.close()
+                    fna_regenerated_count += 1
                     if args.verbose: print('    wrote: '+accession_nt_fasta)
 
                     with open(accession_aa_fasta, "w") as make_aa_file:
@@ -644,7 +660,7 @@ def fetch_fasta(processed_accession_file_name):
                                 
                                 # Write to .faa
                                 make_aa_file.write(f"{header}\n{sequence}\n")
-                               
+                        faa_regenerated_count += 1
                         if args.verbose: print('    wrote: '+accession_aa_fasta, " with ", len(protein_check), " CDS records")
                 else:
                     handle_accession_error(row, "no sequence found in {0}".format(accession_gb))
@@ -665,6 +681,13 @@ def fetch_fasta(processed_accession_file_name):
     print("Bad_Accession count:", len(bad_accessions))
     pd.DataFrame.from_records(bad_accessions, columns=Accessions.columns).to_csv(bad_accessions_fname,sep='\t',index=False)
     print("Wrote to ", bad_accessions_fname)
+    print("# FASTA statistics")
+    print("  processed_accessions: {0}".format(len(Accessions.index)))
+    print("  gb_downloaded: {0}".format(gb_download_count))
+    print("  fna_regenerated: {0}".format(fna_regenerated_count))
+    print("  faa_regenerated: {0}".format(faa_regenerated_count))
+    print("  unique_isolate_ids: {0}".format(Accessions["Isolate_ID"].nunique()))
+    print("  processed_protein_records: {0}".format(len(processed_protein_rows)))
 
     
 #######################################################################################################################################
@@ -737,6 +760,7 @@ def main():
             tested_accessions_ids["Errors"].fillna("").astype(str).str.strip() != ""
         ]
         pd.DataFrame.to_csv(accession_warning_rows,bad_accessions_fname,sep='\t',index=False)
+        print_vmr_stats(vmr_data, tested_accessions_ids)
 
     if args.mode == "fasta" or None:
         print("# {0} pull FASTAs from NCBI".format(formatElapsedTime()))
