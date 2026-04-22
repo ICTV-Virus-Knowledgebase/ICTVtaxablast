@@ -113,7 +113,7 @@ fi
 #
 # check for failed downloads
 #
-EMPTY_RAWS=$(find $FASTA_DIR -size 0 \! -name "nan.raw")
+EMPTY_RAWS=$(find $FASTA_DIR -size 0 \( -name "*.gb" -o -name "*.fna" \) \! -name "nan.raw")
 if [[ ! -z "$EMPTY_RAWS" ]]; then
 	echo "ERROR: empty files in the $FASTA_DIR fasta download/formatting cache"
 	echo "# delete them using "
