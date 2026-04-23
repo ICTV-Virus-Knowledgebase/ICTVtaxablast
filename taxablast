@@ -28,31 +28,33 @@ from Bio import SeqIO, SeqRecord
 
 # Data provided by BLAST results.
 @dataclass
+class SseqIctv():
+   segment_end_loc: int | None
+   isolate_exemplar: str | None
+   species_ictv_id: str | None
+   isolate_id: str | None
+   segment_name: str | None
+   segment_accession: str | None
+   cds_protein_id: str | None
+   cds_product_name: str | None
+   cds_note: str | None
+   # Note: The dict keys are realm, subrealm, kingdom, subkingdom, phylum, subphylum, class, subclass, order, suborder, family, subfamily, genus, subgenus, and species.
+   lineage: Dict[str, str]
+   segment_start_loc: int | None
+   isolate_name: str | None
+   isolate_abbrev: str | None
+   isolate_designation: str | None
+
+
+@dataclass
 class BlastHit():
    bitscore: float
-   end_loc: int | None
    evalue: float | None
-   exemplar_additional: str | None
-   ictv_id: str | None
-   input_seq: str
-   isolate_id: str | None
    length: int
    pident: float
    qseqid: str
-   segmentname: str | None
    sseqid: str | None
-   sseqid_accession: str | None
-   sseq_isolate_abbrev: str | None
-   sseq_isolate_designation: str | None
-   Protein_id: str | None
-   Product_name: str | None
-   Note: str | None
-
-   # Note: The dict keys are realm, subrealm, kingdom, subkingdom, phylum, subphylum, class, subclass, order, suborder, family, subfamily, genus, subgenus, and species.
-   sseqid_lineage: Dict[str, str]
-   
-   start_loc: int | None
-   virus_names: str | None
+   sseq_ictv: SseqIctv
 
 # Metadata for a single FASTA sequence. 
 @dataclass
@@ -71,7 +73,7 @@ class SequenceData():
 @dataclass
 class FileData():
    errors: List[str]
-   name: str
+   filename: str
    sequences: List[SequenceData]
 
 # The taxaBLAST results that are saved as a JSON output file.
@@ -461,7 +463,7 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
       sseq_isolate_designation = str(sseq_isolate_designation)
 
    # Add the lineage information to the hit.
-   sseqid_lineage = {}
+   sseq_lineage = {}
 
    for src_key, target_key in rankmap.items():
 
@@ -469,36 +471,43 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
       if isinstance(taxon, float) and np.isnan(taxon):
          taxon = None
 
-      sseqid_lineage[target_key] = taxon
+      sseq_lineage[target_key] = taxon
 
-   # Use the sseqid to generate the sseqid_accession.
+   # Use the subject header format to extract the ICTV segment accession.
+   sseq_segment_accession = None
    if sseqid:
-      sseqid_accession = sseqid.replace(sseqid.rsplit("-", 1)[0] + "-", "")
-   else:
-      sseqid_accession = None
+      if settings.task == "blastp" or settings.task == "blastx":
+         sseq_parts = sseqid.rsplit("-", 2)
+         if len(sseq_parts) >= 2:
+            sseq_segment_accession = sseq_parts[-2]
+      else:
+         sseq_parts = sseqid.rsplit("-", 1)
+         if len(sseq_parts) == 2:
+            sseq_segment_accession = sseq_parts[-1]
 
    return BlastHit(
       bitscore = bitscore,
-      end_loc = end_loc,
       evalue = evalue,
-      exemplar_additional = exemplar_additional,
-      ictv_id = ictv_id,
-      input_seq = readable_filename,
-      isolate_id = isolate_id,
       length = length,
       pident = pident,
       qseqid = qseqid,
-      segmentname = segment_name,
       sseqid = sseqid,
-      sseqid_accession = sseqid_accession,
-      sseq_isolate_abbrev = sseq_isolate_abbrev,
-      sseq_isolate_designation = sseq_isolate_designation,
-      sseqid_lineage = sseqid_lineage,
-      start_loc = start_loc,
-      virus_names = virus_names,
-      Protein_id = Protein_id,
-      Product_name = Product_name,
-      Note = Note
+      sseq_ictv = SseqIctv(
+         segment_end_loc = end_loc,
+         isolate_exemplar = exemplar_additional,
+         species_ictv_id = ictv_id,
+         isolate_id = isolate_id,
+         segment_name = segment_name,
+         segment_accession = sseq_segment_accession,
+         cds_protein_id = Protein_id,
+         cds_product_name = Product_name,
+         cds_note = Note,
+         lineage = sseq_lineage,
+         segment_start_loc = start_loc,
+         isolate_name = virus_names,
+         isolate_abbrev = sseq_isolate_abbrev,
+         isolate_designation = sseq_isolate_designation,
+      )
    )
 
 
@@ -751,7 +760,7 @@ def process_fasta_file(sequence_file: SequenceFile):
    else:
       input_file_data = FileData(
          errors = [],
-         name = readable_input_filename,
+         filename = readable_input_filename,
          sequences = []
       )
       
