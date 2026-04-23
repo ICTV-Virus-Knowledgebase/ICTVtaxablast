@@ -42,6 +42,8 @@ class BlastHit():
    segmentname: str | None
    sseqid: str | None
    sseqid_accession: str | None
+   sseq_isolate_abbrev: str | None
+   sseq_isolate_designation: str | None
    Protein_id: str | None
    Product_name: str | None
    Note: str | None
@@ -446,6 +448,18 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
    if isinstance(row["Virus_Names"], float) and np.isnan(row["Virus_Names"]):
       virus_names = None
 
+   sseq_isolate_abbrev = row.get("isolate_abbrev")
+   if pd.isna(sseq_isolate_abbrev):
+      sseq_isolate_abbrev = None
+   else:
+      sseq_isolate_abbrev = str(sseq_isolate_abbrev)
+
+   sseq_isolate_designation = row.get("isolate_designation")
+   if pd.isna(sseq_isolate_designation):
+      sseq_isolate_designation = None
+   else:
+      sseq_isolate_designation = str(sseq_isolate_designation)
+
    # Add the lineage information to the hit.
    sseqid_lineage = {}
 
@@ -477,6 +491,8 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
       segmentname = segment_name,
       sseqid = sseqid,
       sseqid_accession = sseqid_accession,
+      sseq_isolate_abbrev = sseq_isolate_abbrev,
+      sseq_isolate_designation = sseq_isolate_designation,
       sseqid_lineage = sseqid_lineage,
       start_loc = start_loc,
       virus_names = virus_names,
@@ -598,6 +614,32 @@ def is_valid_sequence(sequence: str) -> bool:
 
    # Validate as a nucleotide sequence.
    return set(sequence.upper()) <= VALID_NT or set(sequence.upper()) <= VALID_AA
+
+
+def load_sequences_for_blast(input_file: Path) -> list[SeqRecord.SeqRecord] | None:
+
+   parse_errors: list[str] = []
+
+   for fmt in ("fasta", "fasta-blast"):
+      try:
+         sequences = list(SeqIO.parse(input_file, fmt))
+      except Exception as exc:
+         parse_errors.append(f"{fmt}: {exc}")
+         continue
+
+      if len(sequences) > 0:
+         if fmt == "fasta-blast":
+            print(f"Treating {input_file.name} as BLAST-style FASTA with leading comments")
+         return sequences
+
+   if parse_errors:
+      logging.warning(
+         "Passing %s through to BLAST without FASTA parsing: %s",
+         input_file.name,
+         "; ".join(parse_errors)
+      )
+
+   return None
 
 
 
@@ -1045,13 +1087,19 @@ def split_input_files() -> list[SequenceFile] | None:
    # Sort so that order is stable, makes output regression testing easier.
    for input_file in sorted(input_directory.iterdir(), key=lambda path: path.name):
 
-      # Make sure the file has a valid extension for a FASTA file.
-      if input_file.suffix.lower() not in FASTA_FILE_EXTENSIONS:
+      if not input_file.is_file():
          continue
 
-      # Parse the input file for FASTA sequences.
-      sequences: list[SeqRecord.SeqRecord] = list(SeqIO.parse(input_file, "fasta"))
-      if sequences is None or len(sequences) < 1:
+      # Parse FASTA when possible; otherwise pass the original file through to BLAST unchanged.
+      sequences = load_sequences_for_blast(input_file)
+      if not sequences:
+         sequence_count += 1
+         if sequence_count > MAX_SEQUENCES:
+            raise Exception(f"You uploaded more than the maximum number of sequences ({MAX_SEQUENCES})")
+
+         print(f"Passing {input_file.name} through to BLAST without FASTA preprocessing")
+         sequence_files.append(SequenceFile(input_file.name, False, 0))
+         shutil.copy2(input_file, seq_files_path / input_file.name)
          continue
 
       print(f"Found {len(sequences)} sequence(s) in {input_file.name}\n")
@@ -1167,4 +1215,3 @@ if __name__ == "__main__" :
    main()
     
    exit(0)
-

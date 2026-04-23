@@ -98,6 +98,7 @@ def load_VMR_data():
             raise SystemExit(1)
         else:
             raw_vmr_data = pd.read_excel(args.VMR_file_name,sheet_name=sheet_name,engine='openpyxl')
+            raw_vmr_data = raw_vmr_data.rename(columns=lambda col: col.strip() if isinstance(col, str) else col)
             if args.verbose: print("VMR data loaded: {0} rows, {1} columns.".format(*raw_vmr_data.shape))
             if args.verbose: print("\tcolumns: ",raw_vmr_data.columns)
 
@@ -106,7 +107,7 @@ def load_VMR_data():
                 'Isolate ID','Exemplar or additional isolate','Species Sort','Isolate Sort',
                 'Realm','Subrealm','Kingdom','Subkingdom','Phylum','Subphylum','Class','Subclass',
                 'Order','Suborder','Family','Subfamily','Genus','Subgenus','Species',
-                'ICTV_ID','Virus name(s)',
+                'ICTV_ID','Virus name(s)','Virus name abbreviation(s)','Virus isolate designation',
                 'Virus GENBANK accession','Genome coverage']
             
             for col_name in list(raw_vmr_data.columns):
@@ -263,7 +264,7 @@ def test_accession_IDs(df):
         'ICTV_ID','Isolate_ID','Exemplar_Additional','Accession_Index','Segment_Name','Accession', # 0-5
         'Start_Loc','End_Loc','Sort','Isolate_Sort','Original_GENBANK_Accessions','Errors', # 6-11
         'Realm','Subrealm','Kingdom','Subkingdom','Phylum','Subphylum','Class','Subclass','Order','Suborder', # 12-21
-        'Family','Subfamily','Genus','Subgenus','Species','Virus_Names' # 22-27
+        'Family','Subfamily','Genus','Subgenus','Species','Virus_Names','isolate_abbrev','isolate_designation' # 22-29
     ]
     # pattern for accessions qualified by "(START,STOP)" subsequence qualifiers
     accession_start_end_regex = re.compile(r'([A-Za-z0-9_]+(?:\.\d+|\.)?)\s*\((\d+)(\.)(\w+)(\))')
@@ -344,6 +345,8 @@ def test_accession_IDs(df):
                 row['Subgenus'],
                 row['Species'],
                 row['Virus name(s)'],
+                row['Virus name abbreviation(s)'],
+                row['Virus isolate designation'],
             ])
             #print("'"+processed_accession+"'"+' has been cleaned.')
 

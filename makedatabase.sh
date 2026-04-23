@@ -53,8 +53,9 @@ ACCESSION_TSV=processed_accessions_${EA}.fa_names.tsv
 ACCESSION_COUNT=$(tail -n +2 $ACCESSION_TSV |wc -l)
 TSV_COL_ACC=6
 TSV_COL_GENUS=25
-TSV_COL_FASTA_PROT=30
-TSV_COL_FASTA_NUC=31
+TSV_COL_FASTA_GB=31
+TSV_COL_FASTA_PROT=32
+TSV_COL_FASTA_NUC=33
 VMR_FILE=$(basename $VMR_PATH)
 ALL_FASTA=./fasta_new_vmr_${EA}.fa
 FASTA_DIR=./fasta_new_vmr_${EA}
@@ -65,14 +66,14 @@ SRC_DIR=$(dirname $ALL_FASTA)
 # NUC db
 NUC_ALL_FASTA=./fasta_new_vmr_${EA}.fna
 NUC_BLASTDB=./blast/ICTV_VMR_${EA}_nuc
-NUC_FIRST_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7".fna"}' $ACCESSION_TSV|head -1)
-NUC_OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7"_nuc"}' $ACCESSION_TSV|head -1)
+NUC_FIRST_FASTA=$(awk -v FS='\t' -v GENUS="$TSV_COL_GENUS" -v ACC="$TSV_COL_ACC" 'NR>1 {print $GENUS"/"$ACC".fna"}' "$ACCESSION_TSV" | head -1)
+NUC_OUT_FILEPATH=$(awk -v FS='\t' -v GENUS="$TSV_COL_GENUS" -v ACC="$TSV_COL_ACC" 'NR>1 {print $GENUS"/"$ACC"_nuc"}' "$ACCESSION_TSV" | head -1)
 
 # PROT db
 PROT_ALL_FASTA=./fasta_new_vmr_${EA}.faa
 PROT_BLASTDB=./blast/ICTV_VMR_${EA}_prot
-PROT_FIRST_FASTA=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7".faa"}' $ACCESSION_TSV|head -1)
-PROT_OUT_FILEPATH=$(awk 'BEGIN{FS="\t";GENUS=26;ACC=7}(NR>1){print $26"/"$7"_prot"}' $ACCESSION_TSV|head -1)
+PROT_FIRST_FASTA=$(awk -v FS='\t' -v GENUS="$TSV_COL_GENUS" -v ACC="$TSV_COL_ACC" 'NR>1 {print $GENUS"/"$ACC".faa"}' "$ACCESSION_TSV" | head -1)
+PROT_OUT_FILEPATH=$(awk -v FS='\t' -v GENUS="$TSV_COL_GENUS" -v ACC="$TSV_COL_ACC" 'NR>1 {print $GENUS"/"$ACC"_prot"}' "$ACCESSION_TSV" | head -1)
 
 
 cat <<EOF
@@ -234,4 +235,3 @@ blastp -db $PROT_BLASTDB -query $fasta_dir/$PROT_FIRST_FASTA -out ./results/$EA/
 blast_formatter -archive ./results/$EA/${PROT_OUT_FILEPATH}.asn -out ./results/$EA/${PROT_OUT_FILEPATH}.html -html
 
 EOF
-
