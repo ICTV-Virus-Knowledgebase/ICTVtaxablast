@@ -1,6 +1,6 @@
 {
     "database_name": "./blast/ICTV_VMR_b_nuc",
-    "database_title": "ICTV VMR_MSL40.v1.20250307_test_with_longest.xlsx [b] protein \t6,517 sequences; 1,996,298 total residues  Date: Apr 19, 2026  11:10 PM\tLongest sequence: 5,559 residues",
+    "database_title": "ICTV VMR_MSL40.v1.20250307_test_with_longest.xlsx [b] protein \t2,105 sequences; 603,174 total residues  Date: Apr 23, 2026  4:28 PM\tLongest sequence: 2,959 residues",
     "errors": [],
     "files": [
         {
@@ -26,6 +26,8 @@
                             "segmentname": "Seg1",
                             "sseqid": "Seadornavirus_liaoningense-Seg1-AY317099.1-AAQ83562.1",
                             "sseqid_accession": "AAQ83562.1",
+                            "sseq_isolate_abbrev": "LNV",
+                            "sseq_isolate_designation": "NE9731",
                             "Protein_id": "AAQ83562.1",
                             "Product_name": "VP1",
                             "Note": "RNA-dependent RNA polymerase",
@@ -80,6 +82,8 @@
                             "segmentname": "Seg2",
                             "sseqid": "Seadornavirus_liaoningense-Seg2-AY317100.1-AAQ83563.1",
                             "sseqid_accession": "AAQ83563.1",
+                            "sseq_isolate_abbrev": "LNV",
+                            "sseq_isolate_designation": "NE9731",
                             "Protein_id": "AAQ83563.1",
                             "Product_name": "VP2",
                             "Note": null,
@@ -134,6 +138,8 @@
                             "segmentname": null,
                             "sseqid": "Kayvirus_G1--AY954969.1-AAX92092.1",
                             "sseqid_accession": "AAX92092.1",
+                            "sseq_isolate_abbrev": null,
+                            "sseq_isolate_designation": null,
                             "Protein_id": "AAX92092.1",
                             "Product_name": "ORF010",
                             "Note": "G1ORF010",
@@ -164,11 +170,27 @@
                     "status": "HITS"
                 }
             ]
+        },
+        {
+            "errors": [],
+            "name": "not_fasta.txt",
+            "sequences": [
+                {
+                    "blast_csv": "test_out/prot/blastp//not_fasta.txt.csv",
+                    "blast_html": "test_out/prot/blastp//not_fasta.txt.html",
+                    "errors": [],
+                    "hits": [],
+                    "input_file": "not_fasta.txt",
+                    "qseqid": "",
+                    "sequence_length": 0,
+                    "status": "NO_HITS"
+                }
+            ]
         }
     ],
     "input_dir": "test_data/prot/",
     "program_name": "taxablast",
-    "version": "VMR_MSL41.v1.20260320.cmd.protein.merged.32f19af",
+    "version": "VMR_MSL41.v1.20260320.iso_designation.7afa223",
     "task": "blastp",
     "max_target_seqs": 50,
     "max_hsps": 25,
