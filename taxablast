@@ -52,7 +52,11 @@ class BlastHit():
    evalue: float | None
    length: int
    pident: float
+   qstart: int | None
+   qend: int | None
    qseqid: str
+   sstart: int | None
+   send: int | None
    sseqid: str | None
    sseq_ictv: SseqIctv
 
@@ -402,6 +406,18 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
 
    pident = row["pident"]
 
+   qstart = row["qstart"]
+   if isinstance(qstart, float) and np.isnan(qstart):
+      qstart = None
+   else:
+      qstart = int(qstart)
+
+   qend = row["qend"]
+   if isinstance(qend, float) and np.isnan(qend):
+      qend = None
+   else:
+      qend = int(qend)
+
    qseqid = row["qseqid"]
 
    # if task is blastp, get the Protein_id and Product_name from the parsed_protein_data_df, if not, skip since these columns won't be populated for blastn/dc-megablast/megablast
@@ -439,6 +455,18 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
       sseqid = None
    else:
       sseqid = str(sseqid)
+
+   sstart = row["sstart"]
+   if isinstance(sstart, float) and np.isnan(sstart):
+      sstart = None
+   else:
+      sstart = int(sstart)
+
+   send = row["send"]
+   if isinstance(send, float) and np.isnan(send):
+      send = None
+   else:
+      send = int(send)
 
    start_loc = row["Start_Loc"]
    if isinstance(start_loc, float) and np.isnan(start_loc):
@@ -490,7 +518,11 @@ def create_blast_hit(readable_filename: str, row: pd.Series, row_index: int) -> 
       evalue = evalue,
       length = length,
       pident = pident,
+      qstart = qstart,
+      qend = qend,
       qseqid = qseqid,
+      sstart = sstart,
+      send = send,
       sseqid = sseqid,
       sseq_ictv = SseqIctv(
          segment_end_loc = end_loc,
