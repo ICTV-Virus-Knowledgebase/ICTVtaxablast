@@ -578,6 +578,16 @@ def fetch_fasta(processed_accession_file_name):
                     continue
 
                 if nt_sequence:
+                    gb_mtime = os.path.getmtime(accession_gb)
+                    needs_fna_write = (
+                        not os.path.exists(accession_nt_fasta) or
+                        os.path.getmtime(accession_nt_fasta) < gb_mtime
+                    )
+                    needs_faa_write = (
+                        not os.path.exists(accession_aa_fasta) or
+                        os.path.getmtime(accession_aa_fasta) < gb_mtime
+                    )
+
                     output_nt_sequence = nt_sequence
                     if accession_range is not None:
                         output_nt_sequence = nt_sequence[accession_range["start0"]:accession_range["end0"]]
@@ -588,8 +598,6 @@ def fetch_fasta(processed_accession_file_name):
                                 accession_range["end"]
                             ))
 
-                    make_nt_file= open(accession_nt_fasta,'w')
-                    
                     # Build FASTA header
                     version = gb_open.annotations.get("sequence_version", "1")
                     Beggining_firstline= ([species_name,"-",segment,"-",accession_ID,version,])
@@ -600,51 +608,44 @@ def fetch_fasta(processed_accession_file_name):
                     End_firstlineline= str(End_firstline).replace("[","").replace("]","").replace("'","").replace(","," ")
                     first_line= Beggining_firstline+" "+End_firstlineline
 
-                    #first line of .fna file
-                    make_nt_file.write(">"+first_line+"\n")
+                    if needs_fna_write:
+                        with open(accession_nt_fasta,'w') as make_nt_file:
+                            #first line of .fna file
+                            make_nt_file.write(">"+first_line+"\n")
+                            # sequence line of .fna file in fasta format
+                            make_nt_file.write("{0}\n".format(output_nt_sequence))
+                        fna_regenerated_count += 1
+                        if args.verbose: print('    wrote: '+accession_nt_fasta)
+                    elif args.verbose:
+                        print('    skip up-to-date: '+accession_nt_fasta)
 
+                    protein_check = set()
+                    faa_records = []
+                    for feature in gb_open.features:
+                        if feature.type == "CDS" and "translation" in feature.qualifiers:
+                            if not feature_contained_in_range(feature, accession_range):
+                                continue
+                            protein_id = feature.qualifiers.get("protein_id", ["unknown_protein"])[0]
+                            product_name = feature.qualifiers.get("product", ["unknown_product"])[0]
+                            protein_count= feature.qualifiers["translation"][0].strip()
+                            note_in_gb = feature.qualifiers.get("note", [""])[0]
+                            codon_start = feature.qualifiers.get("codon_start", [""])[0]
+                            if protein_count:
+                                protein_check.add(protein_count)
 
-                    # sequence line of .fna file in fasta format
-                    make_nt_file.write("{0}\n".format(output_nt_sequence))
-                    make_nt_file.close()
-                    fna_regenerated_count += 1
-                    if args.verbose: print('    wrote: '+accession_nt_fasta)
+                            if isinstance(End_firstline, list):
+                                End_firstline_str = " ".join(str(x) for x in End_firstline)
+                            else:
+                                End_firstline_str = str(End_firstline)
+                            header = f">{Beggining_firstline}-{protein_id} {End_firstline_str} product={product_name} "
 
-                    with open(accession_aa_fasta, "w") as make_aa_file:
-                        protein_check = set()
-                        for feature in gb_open.features:
-                            if feature.type == "CDS" and "translation" in feature.qualifiers:
-                                if not feature_contained_in_range(feature, accession_range):
-                                    continue
-                # Build FASTA header for protein
-                                protein_id = feature.qualifiers.get("protein_id", ["unknown_protein"])[0]
-                                
-                                product_name = feature.qualifiers.get("product", ["unknown_product"])[0]
-                                protein_count= feature.qualifiers["translation"][0].strip()
-                                note_in_gb = feature.qualifiers.get("note", [""])[0]
-                                codon_start = feature.qualifiers.get("codon_start", [""])[0]
-                                if protein_count:
-                                    protein_check.add(protein_count)
+                            #data for protein accessions and product names
+                            processed_protein_rows.append([accession_ID, protein_id, product_name, note_in_gb, codon_start])
 
+                            sequence = feature.qualifiers["translation"][0]
+                            faa_records.append((header, sequence))
 
-                                #first line of .faa file
-                                header = f">{Beggining_firstline} {protein_id} {End_firstline} {product_name} "
-                                # Remove brackets and quotes from End_firstline if it's a list
-                                if isinstance(End_firstline, list):
-                                    End_firstline_str = " ".join(str(x) for x in End_firstline)
-                                else:
-                                    End_firstline_str = str(End_firstline)
-                                header = f">{Beggining_firstline}-{protein_id} {End_firstline_str} product={product_name} "
-                                make_bad_protein_len= open(bad_protein_len,'w', newline="")
-
-
-
-
-
-                                #data for protein accessions and product names
-                                processed_protein_rows.append([accession_ID, protein_id, product_name, note_in_gb, codon_start])
-                                
-                                sequence = feature.qualifiers["translation"][0] 
+                            if needs_faa_write:
                                 protein_tuple = (sequence)
                                 seq_in_protein= len(protein_tuple)
                                 #CDS number of nucleotides check
@@ -654,17 +655,19 @@ def fetch_fasta(processed_accession_file_name):
                                     len_match= "NO"
                                 else:
                                     len_match= "YES"
-                                len_report_writer = csv.writer(make_bad_protein_len, delimiter='\t')
-                                len_report_writer.writerow(["Accession_ID",'Nucleotide_length','Protein_length','Match', "Protein_id"])
-                                len_report_writer.writerow([accession_ID,seq_in_nt,seq_in_protein,len_match, protein_id])
+                                with open(bad_protein_len,'w', newline="") as make_bad_protein_len:
+                                    len_report_writer = csv.writer(make_bad_protein_len, delimiter='\t')
+                                    len_report_writer.writerow(["Accession_ID",'Nucleotide_length','Protein_length','Match', "Protein_id"])
+                                    len_report_writer.writerow([accession_ID,seq_in_nt,seq_in_protein,len_match, protein_id])
 
-                                make_bad_protein_len.close()
-                               
-                                
-                                # Write to .faa
+                    if needs_faa_write:
+                        with open(accession_aa_fasta, "w") as make_aa_file:
+                            for header, sequence in faa_records:
                                 make_aa_file.write(f"{header}\n{sequence}\n")
                         faa_regenerated_count += 1
                         if args.verbose: print('    wrote: '+accession_aa_fasta, " with ", len(protein_check), " CDS records")
+                    elif args.verbose:
+                        print('    skip up-to-date: '+accession_aa_fasta)
                 else:
                     handle_accession_error(row, "no sequence found in {0}".format(accession_gb))
                     continue
