@@ -1,6 +1,6 @@
 <h1>VMR_to_BlastDB</h1>
 
-This is a set of tools to extract data from the Virial Metadata Resource(VMR) published by the ICTV and build a	query-by-sequence database and application from it.
+This is a set of tools to extract data from the Viral Metadata Resource (VMR) published by the ICTV and build a query-by-sequence database and application from it.
 
 <h2>commands</h2>
 
