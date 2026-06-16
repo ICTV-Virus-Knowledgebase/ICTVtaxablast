@@ -43,7 +43,7 @@ class BlastTask(Enum):
    blastn = "blastn"
    blastp = "blastp"
    blastx = "blastx"
-   dcMegablast = "dc-megablast"
+   dcMegablast = "dcMegablast"
    megablast = "megablast"
 
 
@@ -275,7 +275,7 @@ BLAST_TASK_PARAMETER_SETS = {
        "exec": BlastExec.blastn.value,
        "db_type": BlastDbType.nucleotide,
        "params": [
-           ("-task", BlastTask.dcMegablast.value),
+           ("-task", "dc-megablast"),
            ("-evalue", "0.05"),
            ("-word_size", "11"),
            ("-reward", "1"),
