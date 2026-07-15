@@ -357,11 +357,12 @@ def sanitize_filename(value):
 
 def fetch_entrez_text(db, accession_ID, rettype, output_file_name, entrez_sleep):
     handle = Entrez.efetch(db=db, id=accession_ID, rettype=rettype, retmode="text")
+    id= ",".join(accession_ID)
     time.sleep(entrez_sleep)
     raw_text = handle.read()
     handle.close()
-    with open(output_file_name, 'w') as raw_file:
-        raw_file.write(raw_text)
+    with open(output_file_name, 'a') as out:
+        out.write(raw_text)
     return raw_text
 
 def fetch_contig_sequence(contig_accession, genus_dir, entrez_sleep):
@@ -401,6 +402,7 @@ def sequence_from_genbank_record(gb_record, accession_ID, genus_dir, entrez_slee
 def parse_accession_range(row, accession_ID, sequence_length):
     start_loc = str(row.get("Start_Loc", "")).strip()
     end_loc = str(row.get("End_Loc", "")).strip()
+    print(f"parse_accession_range; accession {accession_ID} has invalid range: start={start_loc}, end={end_loc}, row_accession={row.get("Accession")}")
     if start_loc == "" and end_loc == "":
         return None
     if start_loc == "" or end_loc == "":
@@ -462,8 +464,8 @@ def fetch_fasta(processed_accession_file_name):
     if args.verbose: print("  loading:", processed_accession_file_name)
     # "Acessions" was for original nt data
     Accessions = pd.read_csv(processed_accession_file_name,sep='\t')
+    Accession_column= Accessions["Accession"].dropna().astype(str).tolist()
 
-    all_reads = []
     bad_accessions = Accessions.loc[
         Accessions["Errors"].fillna("").astype(str).str.strip() != ""
     ].fillna("").to_dict("records")
@@ -478,28 +480,66 @@ def fetch_fasta(processed_accession_file_name):
                 raise exception
             raise RuntimeError(message)
 
+
+   
+        
+
+
+    
+
     # NCBI Entrez Session setup
-    entrez_sleep = 0.34 # 3 requests per second with email authN
+    entrez_sleep = 0.4 # 40 requests per second with email authN
     Entrez.email = args.email
     if "NCBI_API_KEY" in os.environ:
         # use API_KEY  authN (10 queries per second)
-        entrez_sleep = 0.1 # 10 requrests per second with API_KEY
+        entrez_sleep = 0.4 # 40 requrests per second with API_KEY
         Entrez.api_key = os.environ["NCBI_API_KEY"]
-        if args.verbose: print("NCBI Entrez 10/second with NCBI_API_KEY")
+        if args.verbose: print("NCBI Entrez 40/second with NCBI_API_KEY")
     else: 
         # use email authN
         if args.verbose: print("NCBI Entrez 3/second with email=",args.email)
 
-    accession_gb_paths = []
+   
+
+    
+          
+              
+                    # open genbank file and read using SeqIO
+    output_gb_file= "records.gb"
+    batch_size=200
+
+                
+    open(output_gb_file,"w").close()
+
+
+    #Batch and Fetch every 200 accessions in column
+    start_total= time.time()
+    for i in range(0, len(Accession_column), batch_size):
+                batch = Accession_column[i:i + batch_size]   # list of up to 200 IDs
+                start= time.time()
+                fetch_entrez_text("nuccore", batch, "gb", output_gb_file, entrez_sleep)
+                end= time.time()
+                # elapsed= end-start
+                # print(f"Batch {i//batch_size + 1} took {elapsed:.2f} seconds")
+
+    end_total = time.time()
+    print(f"Total fetch time: {end_total - start_total/60 :.2f} minutes")
+
+
+
+
+
+
+
+
     accession_aa_fasta_paths = []
     accession_nt_fasta_paths = []
-    gb_download_count = 0
+    accession_gb_paths= []
     fna_regenerated_count = 0
     faa_regenerated_count = 0
 
-    # Fetches FASTA data for every accession number
     for count, row in enumerate(Accessions.fillna('').to_dict('records')):
-            accession_ID = row['Accession']
+            accession_ID  = row['Accession']
             Isolate_ID   = row['Isolate_ID']
             Isolate_type = row['Exemplar_Additional']
             segment      = row['Segment_Name']
@@ -507,173 +547,214 @@ def fetch_fasta(processed_accession_file_name):
             genus_name   = row['Genus']
             species_name = row['Species']
             virus_names  = row['Virus_Names']
-            if args.verbose: print("Fetch [",count,"] ID:",Isolate_ID," Species:",species_name," Segment:",segment," Accession:",accession_ID)
-
-            # fasta_file_name
+            # if args.verbose: print("Fetch [",count,"] ID:",Isolate_ID," Species:",species_name," Segment:",segment," Accession:",accession_ID)
             genus_dir = args.fasta_dir+"/"+str(genus_name)
             if genus_name == "":
                 genus_dir = args.fasta_dir+"/"+"no_genus"
-            accession_gb = genus_dir+"/"+str(accession_ID)+".gb"
-            accession_aa_fasta = genus_dir+"/"+str(accession_ID)+".faa"
-            accession_nt_fasta = genus_dir+"/"+str(accession_ID)+".fna"
+            # individual_gb_file = genus_dir+"/"+str(accession_ID)+".gb"
+            # accession_aa_fasta = genus_dir+"/"+str(accession_ID)+".faa"
+            # accession_nt_fasta = genus_dir+"/"+str(accession_ID)+".fna"
 
             bad_protein_len= genus_dir+"/"+str(accession_ID)+"_bad_protein_length.tsv"
-            
-            accession_gb_paths.append(accession_gb)
-            accession_aa_fasta_paths.append(accession_aa_fasta)
-            accession_nt_fasta_paths.append(accession_nt_fasta)
-    
-            # make sure dir exists
-            if not os.path.exists(genus_dir):
-                # Create the directory if it doesn't exist
-                os.makedirs(genus_dir)
-                if args.verbose: print(f"Directory '{genus_dir}' created successfully.")
-    
-            # check if the raw file exists and is non-empty
-            if os.path.exists(accession_gb) and os.path.getsize(accession_gb) > 0:
-                if args.verbose: print("[FETCH]  SKIP NCBI fetch for {accession_gb}".format(**locals()))
-            else:
-                if args.verbose:
-                    if os.path.exists(accession_gb):
-                        print("[FETCH]  REDO NCBI fetch for empty file {accession_gb}".format(**locals()))
-                    else:
-                        print("[FETCH]  EXEC NCBI fetch for {accession_gb}".format(**locals()))
-                try:
-                    # fetch GenBank from NCBI
-                    fetch_entrez_text("nuccore", accession_ID, "gb", accession_gb, entrez_sleep)
-                    gb_download_count += 1
-                    if args.verbose: print('    .gb for '+accession_ID+ ' obtained.')
-                    if args.verbose: print('    wrote: '+accession_gb)
 
-                except Exception as e:
-                    handle_accession_error(
-                        row,
-                        "Accession ID '{0}' Entrez.efetch threw an error: {1}".format(accession_ID, e),
-                        e
-                    )
+            # # accession_gb_paths.append(individual_gb_file)
+            # accession_aa_fasta_paths.append(accession_aa_fasta)
+            # accession_nt_fasta_paths.append(accession_nt_fasta)
+
+
+
+            #DICT for genus and accession lookup. This is used to create genus directories and place the correct accession in the correct directory.
+            acc_to_genus = dict(zip(Accessions["Accession"], Accessions["Genus"]))
+            # for accession_ID in batch:
+
+            # Find genus for this accession
+            genus_name = acc_to_genus.get(accession_ID)
+            if genus_name is None:
+                print(f"No genus found for {accession_ID}")
+                continue
+
+# Create genus directory
+            genus_dir = os.path.join(args.fasta_dir, genus_name)
+            os.makedirs(genus_dir, exist_ok=True)
+
+# Search for the matching record in the batch GB file
+            for record in SeqIO.parse(output_gb_file, "genbank"):
+                accession_in_gb = record.annotations["accessions"][0]
+
+    # Only write the matching record
+
+                if accession_in_gb != accession_ID:
                     continue
+                gb_open= record
+                individual_gb_file = os.path.join(genus_dir, f"{accession_in_gb}.gb")
+                accession_gb_paths.append(individual_gb_file)
+                    
+                accession_aa_fasta = os.path.join(genus_dir, f"{accession_in_gb}.faa")
+                accession_nt_fasta = os.path.join(genus_dir, f"{accession_in_gb}.fna")
+                accession_aa_fasta_paths.append(accession_aa_fasta)
+                accession_nt_fasta_paths.append(accession_nt_fasta)
 
-            # check if processed .faa & .fna fastas are out of date
-            if os.path.getsize(accession_gb) == 0:
-                        handle_accession_error(row, "complete record file is empty: {0}".format(accession_gb))
-                        continue
-            else:
-#            elif os.path.exists(accession_fa_file_name) and os.path.getmtime(accession_fa_file_name) > os.path.getmtime(accession_raw_file_name):
-#                if args.verbose: print("[FORMAT] SKIP reformat header for {accession_fa_file_name}".format(**locals()))
-#            else:
-#                if args.verbose: print("[FORMAT] EXEC reformat header for {accession_fa_file_name}".format(**locals()))
                 
+                        # open genbank file and read using SeqIO
                 try:
-                    # open genbank file and read using SeqIO
-                    with open(accession_gb,"r") as gb_file:
-                        gb_open = SeqIO.read(gb_file, "genbank")
-                    nt_sequence = sequence_from_genbank_record(gb_open, accession_ID, genus_dir, entrez_sleep)
-                    accession_range = parse_accession_range(row, accession_ID, len(nt_sequence))
+                    SeqIO.write(record, individual_gb_file, "genbank")
+                    print(f"File {individual_gb_file} exists and is ready for processing.")
+
+                    if os.path.getsize(individual_gb_file)==0:
+                        handle_accession_error(
+                            row,
+                            "failed to parse sequence for accession {0} from {1}: {2}".format(accession_ID, individual_gb_file, e),
+                                
+                                )
+                        continue
+                    parsed_record= SeqIO.read(individual_gb_file,"genbank")
+                    
+
+                    #extract sequence
+                    nt_sequence = sequence_from_genbank_record(parsed_record, accession_ID, genus_dir, entrez_sleep)
+                    #Compute range
+                    accession_range = parse_accession_range(
+                                    row, accession_ID, len(nt_sequence)
+                                )
                 except Exception as e:
                     handle_accession_error(
-                        row,
-                        "failed to parse sequence for accession {0} from {1}: {2}".format(accession_ID, accession_gb, e),
-                        e
-                    )
+                            row,
+                            "failed to parse sequence for accession {0} from {1}: {2}".format(
+                                accession_ID, individual_gb_file, e
+                            ),
+                            e
+                        )
                     continue
+
 
                 if nt_sequence:
-                    gb_mtime = os.path.getmtime(accession_gb)
+                    gb_mtime = os.path.getmtime(individual_gb_file)
                     needs_fna_write = (
-                        not os.path.exists(accession_nt_fasta) or
-                        os.path.getmtime(accession_nt_fasta) < gb_mtime
-                    )
+                                                not os.path.exists(accession_nt_fasta) or
+                                                os.path.getmtime(accession_nt_fasta) < gb_mtime
+                                            )
                     needs_faa_write = (
-                        not os.path.exists(accession_aa_fasta) or
-                        os.path.getmtime(accession_aa_fasta) < gb_mtime
-                    )
+                                                not os.path.exists(accession_aa_fasta) or
+                                                os.path.getmtime(accession_aa_fasta) < gb_mtime
+                                            )
 
                     output_nt_sequence = nt_sequence
                     if accession_range is not None:
                         output_nt_sequence = nt_sequence[accession_range["start0"]:accession_range["end0"]]
                         if args.verbose:
-                            print("[FORMAT] Trimming {0} to {1}..{2}".format(
-                                accession_ID,
-                                accession_range["start"],
-                                accession_range["end"]
-                            ))
+                                        print("[FORMAT] Trimming {0} to {1}..{2}".format(
+                                                accession_ID,
+                                                accession_range["start"],
+                                                accession_range["end"]
+                                                    ))
 
-                    # Build FASTA header
+
+
+
+
+
+
                     version = gb_open.annotations.get("sequence_version", "1")
-                    Beggining_firstline= ([species_name,"-",segment,"-",accession_ID,version,])
+                    Beginning_firstline= ([species_name,"-",segment,"-",accession_ID,version,])
                     End_firstline= ([family_name,Isolate_type,virus_names])
-                    Beggining_firstline= str(Beggining_firstline).replace("[","").replace("]","").replace("'","").replace(","," ")
-                    Beggining_firstline= re.sub(r"\s*-\s*", "-", re.sub(r"\s+"," ", Beggining_firstline)).replace(" ", "_", 1).replace(" ", ".")
-                    #end first line only needed commas and brackets replaced with spaces.
+                    Beginning_firstline= str(Beginning_firstline).replace("[","").replace("]","").replace("'","").replace(","," ")
+                    Beginning_firstline= re.sub(r"\s*-\s*", "-", re.sub(r"\s+"," ", Beginning_firstline)).replace(" ", "_", 1).replace(" ", ".")
+                        #end first line only needed commas and brackets replaced with spaces.
                     End_firstlineline= str(End_firstline).replace("[","").replace("]","").replace("'","").replace(","," ")
-                    first_line= Beggining_firstline+" "+End_firstlineline
+                    first_line= Beginning_firstline+" "+End_firstlineline
+                                
 
                     if needs_fna_write:
-                        with open(accession_nt_fasta,'w') as make_nt_file:
-                            #first line of .fna file
-                            make_nt_file.write(">"+first_line+"\n")
-                            # sequence line of .fna file in fasta format
-                            make_nt_file.write("{0}\n".format(output_nt_sequence))
-                        fna_regenerated_count += 1
-                        if args.verbose: print('    wrote: '+accession_nt_fasta)
+                                    with open(accession_nt_fasta,'w') as make_nt_file:
+                                    #first line of .fna file
+                                        make_nt_file.write(">"+first_line+"\n")
+                                    # sequence line of .fna file in fasta format
+                                        make_nt_file.write("{0}\n".format(output_nt_sequence))
+                                    fna_regenerated_count += 1
+                                    if args.verbose: print('    wrote: '+accession_nt_fasta)
                     elif args.verbose:
-                        print('    skip up-to-date: '+accession_nt_fasta)
-
+                                                print('    skip up-to-date: '+accession_nt_fasta)
+                    cds_features = [
+                                    f for f in gb_open.features
+                                    if f.type == "CDS" and "translation" in f.qualifiers
+                                ]
                     protein_check = set()
                     faa_records = []
-                    for feature in gb_open.features:
-                        if feature.type == "CDS" and "translation" in feature.qualifiers:
-                            if not feature_contained_in_range(feature, accession_range):
-                                continue
-                            protein_id = feature.qualifiers.get("protein_id", ["unknown_protein"])[0]
-                            product_name = feature.qualifiers.get("product", ["unknown_product"])[0]
-                            protein_count= feature.qualifiers["translation"][0].strip()
-                            note_in_gb = feature.qualifiers.get("note", [""])[0]
-                            codon_start = feature.qualifiers.get("codon_start", [""])[0]
-                            if protein_count:
-                                protein_check.add(protein_count)
+                    bad_protein_rows= []
+                    for feature in cds_features:
+                                    if not feature_contained_in_range(feature, accession_range):
+                                        continue
 
-                            if isinstance(End_firstline, list):
-                                End_firstline_str = " ".join(str(x) for x in End_firstline)
-                            else:
-                                End_firstline_str = str(End_firstline)
-                            header = f">{Beggining_firstline}-{protein_id} {End_firstline_str} product={product_name} "
+                                    qual = feature.qualifiers
+                                    protein_id = qual.get("protein_id", ["unknown_protein"])[0]
+                                    product_name = qual.get("product", ["unknown_product"])[0]
+                                    protein_seq = qual["translation"][0].strip()
+                                    note_in_gb = qual.get("note", [""])[0]
+                                    codon_start = qual.get("codon_start", [""])[0]
 
-                            #data for protein accessions and product names
-                            processed_protein_rows.append([accession_ID, protein_id, product_name, note_in_gb, codon_start])
+                                    protein_check.add(protein_seq)
 
-                            sequence = feature.qualifiers["translation"][0]
-                            faa_records.append((header, sequence))
+                                    # Save protein metadata
+                                    processed_protein_rows.append([
+                                                        accession_ID, protein_id, product_name, note_in_gb, codon_start
+                                                    ])
 
-                            if needs_faa_write:
-                                protein_tuple = (sequence)
-                                seq_in_protein= len(protein_tuple)
-                                #CDS number of nucleotides check
-                                seq_in_nt= len(feature.location)
-                                seq_test= seq_in_nt/3
-                                if seq_test != seq_in_protein:
-                                    len_match= "NO"
-                                else:
-                                    len_match= "YES"
-                                with open(bad_protein_len,'w', newline="") as make_bad_protein_len:
-                                    len_report_writer = csv.writer(make_bad_protein_len, delimiter='\t')
-                                    len_report_writer.writerow(["Accession_ID",'Nucleotide_length','Protein_length','Match', "Protein_id"])
-                                    len_report_writer.writerow([accession_ID,seq_in_nt,seq_in_protein,len_match, protein_id])
+                                                    # Build header once
+                                    header = (
+                                                f">{Beginning_firstline}-{protein_id} "
+                                                    f"{End_firstline} product={product_name}"
+                                                    )
 
+                                    faa_records.append((header, protein_seq))
+                                                    #length check (store rows, write once later)
+                                    seq_in_nt = len(feature.location)
+                                    seq_test = seq_in_nt / 3
+                                    len_match = "YES" if seq_test == len(protein_seq) else "NO"
+
+                                    bad_protein_rows.append([
+                                                        accession_ID, seq_in_nt, len(protein_seq), len_match, protein_id
+                                                    ])
+                                # Write bad protein length report once
+                    if needs_faa_write and bad_protein_rows:
+                                    with open(bad_protein_len, 'w', newline="") as make_bad_protein_len:
+                                        writer = csv.writer(make_bad_protein_len, delimiter='\t')
+                                        writer.writerow([
+                                        "Accession_ID", "Nucleotide_length",
+                                        "Protein_length", "Match", "Protein_id"
+                                ])
+                                        writer.writerows(bad_protein_rows)
+
+                # Write .faa only if needed
                     if needs_faa_write:
-                        with open(accession_aa_fasta, "w") as make_aa_file:
-                            for header, sequence in faa_records:
-                                make_aa_file.write(f"{header}\n{sequence}\n")
-                        faa_regenerated_count += 1
-                        if args.verbose: print('    wrote: '+accession_aa_fasta, " with ", len(protein_check), " CDS records")
+                                    with open(accession_aa_fasta, "w") as make_aa_file:
+                                        for header, sequence in faa_records:
+                                            make_aa_file.write(f"{header}\n{sequence}\n")
+                                    faa_regenerated_count += 1
+                                    if args.verbose:
+                                        print(f"    wrote: {accession_aa_fasta} with {len(protein_check)} CDS records")
                     elif args.verbose:
-                        print('    skip up-to-date: '+accession_aa_fasta)
-                else:
-                    handle_accession_error(row, "no sequence found in {0}".format(accession_gb))
-                    continue
+                                    print(f"    skip up-to-date: {accession_aa_fasta}")
+
+                                # IMPORTANT: stop processing duplicate records
+                    break
+
+
+
+
+                                      
+                                
+                   
+                              
+
+                        
+                        
+                        
+
+                        
+
 
     # output accession table, WITH fasta filenames
-    Accessions["accession_gb"] = accession_gb_paths
+    Accessions["individual_gb_files"] = accession_gb_paths
     Accessions["accession_aa_fasta"] = accession_aa_fasta_paths
     Accessions["accession_nt_fasta"] = accession_nt_fasta_paths
     pd.DataFrame.to_csv(Accessions,processed_accessions_fanames_fname,sep='\t',index=False)
@@ -689,7 +770,7 @@ def fetch_fasta(processed_accession_file_name):
     print("Wrote to ", bad_accessions_fname)
     print("# FASTA statistics")
     print("  processed_accessions: {0}".format(len(Accessions.index)))
-    print("  gb_downloaded: {0}".format(gb_download_count))
+    # print("  gb_downloaded: {0}".format(gb_download_count))
     print("  fna_regenerated: {0}".format(fna_regenerated_count))
     print("  faa_regenerated: {0}".format(faa_regenerated_count))
     print("  unique_isolate_ids: {0}".format(Accessions["Isolate_ID"].nunique()))
