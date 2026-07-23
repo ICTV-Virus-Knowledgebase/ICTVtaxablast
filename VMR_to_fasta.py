@@ -10,6 +10,7 @@
 #     -      
 # ITERMEDIATE FILES:
 print("# Importing time python package")
+from http.client import IncompleteRead
 import time
 startTime = time.time()
 def formatElapsedTime():
@@ -356,14 +357,32 @@ def sanitize_filename(value):
     return re.sub(r'[^A-Za-z0-9_.-]+', '_', str(value))
 
 def fetch_entrez_text(db, accession_ID, rettype, output_file_name, entrez_sleep):
-    handle = Entrez.efetch(db=db, id=accession_ID, rettype=rettype, retmode="text")
-    id= ",".join(accession_ID)
-    time.sleep(entrez_sleep)
-    raw_text = handle.read()
+    handle = Entrez.efetch(db=db,id= ",".join(accession_ID),rettype=rettype, retmode="text", )
+
+    while True:
+        try:
+            raw_text = handle.read()
+            break
+        except IncompleteRead as e:
+             raw_text = e.partial
+             break
+        except ValueError:
+            time.sleep(1)
+            continue
     handle.close()
+
+
+    #covert bytes to string if needed
+    if isinstance(raw_text, bytes):
+        raw_text = raw_text.decode("utf-8", errors="replace")
+
+             
+    
     with open(output_file_name, 'a') as out:
         out.write(raw_text)
+    time.sleep(entrez_sleep)
     return raw_text
+
 
 def fetch_contig_sequence(contig_accession, genus_dir, entrez_sleep):
     contig_fasta = os.path.join(genus_dir, sanitize_filename(contig_accession)+".fna")
@@ -516,14 +535,14 @@ def fetch_fasta(processed_accession_file_name):
     start_total= time.time()
     for i in range(0, len(Accession_column), batch_size):
                 batch = Accession_column[i:i + batch_size]   # list of up to 200 IDs
-                start= time.time()
+                start_time= time.time()
                 fetch_entrez_text("nuccore", batch, "gb", output_gb_file, entrez_sleep)
-                end= time.time()
+                end_time= time.time()
                 # elapsed= end-start
                 # print(f"Batch {i//batch_size + 1} took {elapsed:.2f} seconds")
 
     end_total = time.time()
-    print(f"Total fetch time: {end_total - start_total/60 :.2f} minutes")
+    print(f"Total fetch time: {end_total-start_total/60 :.2f} minutes")
 
 
 
