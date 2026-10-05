@@ -32,6 +32,7 @@ import sys
 import os
 import pathlib # for stem=basename(.txt)
 import csv
+import ssl
 
 # Class needed to load args from files. 
 class LoadFromFile (argparse.Action):
@@ -464,6 +465,15 @@ def print_vmr_stats(vmr_data, processed_accessions):
 def fetch_fasta(processed_accession_file_name):
     if args.verbose: print("fetch_fasta(",processed_accession_file_name,")")
 
+    # A relocated conda environment can retain an OpenSSL default CA path from
+    # its old location. Use the active environment's bundle when that happens.
+    verify_paths = ssl.get_default_verify_paths()
+    if not verify_paths.cafile and not verify_paths.capath and not os.environ.get("SSL_CERT_FILE"):
+        conda_ca_bundle = pathlib.Path(sys.prefix) / "ssl" / "cert.pem"
+        if conda_ca_bundle.is_file():
+            os.environ["SSL_CERT_FILE"] = str(conda_ca_bundle)
+            if args.verbose: print("Using CA bundle:", conda_ca_bundle)
+
     # make sure the output directory exists
     if not os.path.exists(args.fasta_dir):
         # Create the directory if it doesn't exist
@@ -534,15 +544,16 @@ def fetch_fasta(processed_accession_file_name):
     #Batch and Fetch every 200 accessions in column
     start_total= time.time()
     for i in range(0, len(Accession_column), batch_size):
+                if args.verbose: print(f"Batch {i//batch_size + 1} request sent")
                 batch = Accession_column[i:i + batch_size]   # list of up to 200 IDs
                 start_time= time.time()
                 fetch_entrez_text("nuccore", batch, "gb", output_gb_file, entrez_sleep)
                 end_time= time.time()
                 # elapsed= end-start
-                # print(f"Batch {i//batch_size + 1} took {elapsed:.2f} seconds")
+                if args.verbose: print(f"Batch {i//batch_size + 1} took {end - start:.2f} seconds")
 
     end_total = time.time()
-    print(f"Total fetch time: {end_total-start_total/60 :.2f} minutes")
+    print(f"Total fetch time: {(end_total - start_total)/60:.2f} minutes")
 
 
 
@@ -880,9 +891,3 @@ def main():
 main()
 
 if args.verbose: print("# {0} Done.".format(formatElapsedTime()))
-
-
-
-
-
-    
