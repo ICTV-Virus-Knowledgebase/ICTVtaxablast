@@ -549,8 +549,7 @@ def fetch_fasta(processed_accession_file_name):
                 start_time= time.time()
                 fetch_entrez_text("nuccore", batch, "gb", output_gb_file, entrez_sleep)
                 end_time= time.time()
-                # elapsed= end-start
-                if args.verbose: print(f"Batch {i//batch_size + 1} took {end - start:.2f} seconds")
+                if args.verbose: print(f"Batch {i//batch_size + 1} took {end_time - start_time:.2f} seconds")
 
     end_total = time.time()
     print(f"Total fetch time: {(end_total - start_total)/60:.2f} minutes")
