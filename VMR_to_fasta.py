@@ -357,8 +357,9 @@ def test_accession_IDs(df):
 def sanitize_filename(value):
     return re.sub(r'[^A-Za-z0-9_.-]+', '_', str(value))
 
-def fetch_entrez_text(db, accession_ID, rettype, output_file_name, entrez_sleep):
-    handle = Entrez.efetch(db=db,id= ",".join(accession_ID),rettype=rettype, retmode="text", )
+def fetch_entrez_text(db, accession_ID, rettype, output_file_name, entrez_sleep, file_mode="a"):
+    entrez_ids = accession_ID if isinstance(accession_ID, str) else ",".join(accession_ID)
+    handle = Entrez.efetch(db=db, id=entrez_ids, rettype=rettype, retmode="text")
 
     while True:
         try:
@@ -379,22 +380,34 @@ def fetch_entrez_text(db, accession_ID, rettype, output_file_name, entrez_sleep)
 
              
     
-    with open(output_file_name, 'a') as out:
+    with open(output_file_name, file_mode) as out:
         out.write(raw_text)
     time.sleep(entrez_sleep)
     return raw_text
 
 
-def fetch_contig_sequence(contig_accession, genus_dir, entrez_sleep):
+def fetch_contig_sequence(contig_accession, genus_dir, entrez_sleep, minimum_length=0):
     contig_fasta = os.path.join(genus_dir, sanitize_filename(contig_accession)+".fna")
-    if not os.path.exists(contig_fasta):
-        if args.verbose: print("[FETCH]  EXEC NCBI fetch for CONTIG {0}".format(contig_accession))
-        fetch_entrez_text("nuccore", contig_accession, "fasta", contig_fasta, entrez_sleep)
-    elif args.verbose:
-        print("[FETCH]  SKIP NCBI fetch for {0}".format(contig_fasta))
 
-    contig_record = SeqIO.read(contig_fasta, "fasta")
-    return str(contig_record.seq)
+    def read_contig():
+        record = SeqIO.read(contig_fasta, "fasta")
+        if record.id != contig_accession or len(record.seq) < minimum_length:
+            raise ValueError("invalid CONTIG cache {0}: expected {1} with at least {2} bases, got {3} with {4}".format(
+                contig_fasta, contig_accession, minimum_length, record.id, len(record.seq)))
+        return str(record.seq)
+
+    if os.path.exists(contig_fasta):
+        try:
+            sequence = read_contig()
+        except ValueError as exc:
+            if args.verbose: print("[FETCH]  Replacing invalid CONTIG cache:", exc)
+        else:
+            if args.verbose: print("[FETCH]  SKIP NCBI fetch for {0}".format(contig_fasta))
+            return sequence
+
+    if args.verbose: print("[FETCH]  EXEC NCBI fetch for CONTIG {0}".format(contig_accession))
+    fetch_entrez_text("nuccore", contig_accession, "fasta", contig_fasta, entrez_sleep, file_mode="w")
+    return read_contig()
 
 def sequence_from_genbank_record(gb_record, accession_ID, genus_dir, entrez_sleep):
     try:
@@ -410,9 +423,9 @@ def sequence_from_genbank_record(gb_record, accession_ID, genus_dir, entrez_slee
 
         sequence_parts = []
         for contig_accession, start_str, end_str in contig_parts:
-            contig_seq = fetch_contig_sequence(contig_accession, genus_dir, entrez_sleep)
             start = int(start_str) - 1
             end = int(end_str)
+            contig_seq = fetch_contig_sequence(contig_accession, genus_dir, entrez_sleep, minimum_length=end)
             sequence_parts.append(contig_seq[start:end])
 
         if args.verbose:
