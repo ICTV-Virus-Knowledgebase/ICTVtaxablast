@@ -100,10 +100,12 @@ diff -w -u test_data/results/$DB/$TASK/tax_results.json test_out/$DB/$TASK/tax_r
   
     ./VMR_to_fasta.py -mode fasta -ea [E|A|B] -email [your_email]
 
-  This also writes `records.xlsx` in the working directory with `isolate_id`, `accession_id`,
-  `organism`, `strain`, and `isolation_source` columns. For records with multiple source
-  features, distinct organism and isolation-source values are joined with commas. `isolate_id`
-  is taken from the VMR and matched by accession; unavailable qualifiers are left blank.
+  This also writes an annotation workbook beside the processed-accessions TSV, using its name
+  with `.gbk_anno.xlsx` appended to the stem (for example, `processed_accessions_b.gbk_anno.xlsx`
+  when using `-ea b`). It has `isolate_id`, `accession_id`, `organism`, `strain`, and
+  `isolation_source` columns. For records with multiple source features, distinct organism and
+  isolation-source values are joined with commas. `isolate_id` is taken from the VMR and matched
+  by accession; unavailable qualifiers are left blank.
     
 <h3>Build database</h3>
 

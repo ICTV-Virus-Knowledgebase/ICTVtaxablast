@@ -386,12 +386,11 @@ def fetch_entrez_text(db, accession_ID, rettype, output_file_name, entrez_sleep,
     return raw_text
 
 
-def write_records_xlsx(genbank_file_name, accessions):
+def write_records_xlsx(genbank_file_name, accessions, accession_tsv_file_name):
     # TODO:
     # Process all fields from the VMR.
     # Format isolate_id as a link to PROD: =HYPERLINK(“URL”,”display text”).
     # Format accession_id as link: https://www.ncbi.nlm.nih.gov/nuccore/AF271059.
-    # Output xlsx as “processed_accessions_b.gbk_anno.xlsx”.
 
     isolate_ids_by_accession = {}
     # accession number and its associated Isolate_ID.
@@ -468,9 +467,9 @@ def write_records_xlsx(genbank_file_name, accessions):
         "isolation_source",
     ]
 
-    # Create records.xlsx.
-    pd.DataFrame.from_records(records_xlsx_rows, columns=records_xlsx_columns).to_excel("records.xlsx", index=False)
-    print("Wrote {0} records to records.xlsx".format(len(records_xlsx_rows)))
+    records_xlsx_file_name = pathlib.Path(accession_tsv_file_name).with_suffix(".gbk_anno.xlsx")
+    pd.DataFrame.from_records(records_xlsx_rows, columns=records_xlsx_columns).to_excel(records_xlsx_file_name, index=False)
+    print("Wrote {0} records to {1}".format(len(records_xlsx_rows), records_xlsx_file_name))
 
 
 def fetch_contig_sequence(contig_accession, genus_dir, entrez_sleep, minimum_length=0):
@@ -654,7 +653,7 @@ def fetch_fasta(processed_accession_file_name):
     end_total = time.time()
     print(f"Total fetch time: {(end_total - start_total)/60:.2f} minutes")
 
-    write_records_xlsx(output_gb_file, Accessions)
+    write_records_xlsx(output_gb_file, Accessions, processed_accession_file_name)
 
 
 
