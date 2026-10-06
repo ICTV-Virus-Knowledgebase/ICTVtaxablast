@@ -99,6 +99,11 @@ diff -w -u test_data/results/$DB/$TASK/tax_results.json test_out/$DB/$TASK/tax_r
   To download fasta data from NCBI:
   
     ./VMR_to_fasta.py -mode fasta -ea [E|A|B] -email [your_email]
+
+  This also writes `records.xlsx` in the working directory with `isolate_id`, `accession_id`,
+  `organism`, `strain`, and `isolation_source` columns. For records with multiple source
+  features, distinct organism and isolation-source values are joined with commas. `isolate_id`
+  is taken from the VMR and matched by accession; unavailable qualifiers are left blank.
     
 <h3>Build database</h3>
 

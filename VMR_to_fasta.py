@@ -386,6 +386,93 @@ def fetch_entrez_text(db, accession_ID, rettype, output_file_name, entrez_sleep,
     return raw_text
 
 
+def write_records_xlsx(genbank_file_name, accessions):
+    # TODO:
+    # Process all fields from the VMR.
+    # Format isolate_id as a link to PROD: =HYPERLINK(“URL”,”display text”).
+    # Format accession_id as link: https://www.ncbi.nlm.nih.gov/nuccore/AF271059.
+    # Output xlsx as “processed_accessions_b.gbk_anno.xlsx”.
+
+    isolate_ids_by_accession = {}
+    # accession number and its associated Isolate_ID.
+    accession_rows = accessions.loc[accessions["Accession"].notna(), ["Accession", "Isolate_ID"]]
+    # Loop through the accession and Isolate_ID rows in the accessions DataFrame.
+    for accession_id, isolate_id in zip(accession_rows["Accession"], accession_rows["Isolate_ID"]):
+        # Skip this row if pandas recognizes Isolate_ID as missing.
+        if pd.isna(isolate_id):
+            continue
+        # isolate_ids associated with the current accession.
+        isolate_ids = isolate_ids_by_accession.setdefault(str(accession_id), [])
+        isolate_id = str(isolate_id)
+        # If isolate_id is not in isolate_ids, add it
+        if isolate_id not in isolate_ids:
+            isolate_ids.append(isolate_id)
+
+    records_xlsx_rows = []
+    # Loop through the records in genbank_file_name (ex: records.gb).
+    for record in SeqIO.parse(genbank_file_name, "genbank"):
+        accession_ids = record.annotations.get("accessions") or [record.id]
+        accession_id = str(accession_ids[0])
+        # List comprehension containing every feature of type "source"
+        # This is needed to deal with records that have more than one source inside records.gb.
+        source_features = [
+            feature for feature in record.features if feature.type == "source"
+        ]
+
+        # Get /organism for record, even when there is more than one source in the record.
+        organism_values = list(
+            dict.fromkeys(
+                value
+                for feature in source_features
+                for value in feature.qualifiers.get("organism", [])
+                if value
+            )
+        )
+
+        # Get /isolation_values for record, even when there is more than one source in the record.
+        isolation_values = list(
+            dict.fromkeys(
+                value
+                for feature in source_features
+                for value in feature.qualifiers.get("isolation_source", [])
+                if value
+            )
+        )
+
+        # Fallback when organism_values is empty.
+        if not organism_values:
+            organism_values = [record.annotations.get("organism", "")]
+        # I think this assumes that strain will always be on the first source feature in the record (I am not sure that it always is).
+        source_qualifiers = source_features[0].qualifiers if source_features else {}
+        strain_values = source_qualifiers.get("strain", [])
+
+        # Pair field names with their values.
+        # Appends one row per mapped isolate ID, or one row with a blank isolate ID if none is mapped.
+        for isolate_id in isolate_ids_by_accession.get(accession_id) or [""]:
+            records_xlsx_rows.append(
+                {
+                    "isolate_id": isolate_id,
+                    "accession_id": accession_id,
+                    "organism": ", ".join(organism_values),
+                    "strain": strain_values[0] if strain_values else "",
+                    "isolation_source": ", ".join(isolation_values),
+                }
+            )
+
+    # Designate the columns wanted in xlsx.
+    records_xlsx_columns = [
+        "isolate_id",
+        "accession_id",
+        "organism",
+        "strain",
+        "isolation_source",
+    ]
+
+    # Create records.xlsx.
+    pd.DataFrame.from_records(records_xlsx_rows, columns=records_xlsx_columns).to_excel("records.xlsx", index=False)
+    print("Wrote {0} records to records.xlsx".format(len(records_xlsx_rows)))
+
+
 def fetch_contig_sequence(contig_accession, genus_dir, entrez_sleep, minimum_length=0):
     contig_fasta = os.path.join(genus_dir, sanitize_filename(contig_accession)+".fna")
 
@@ -567,6 +654,7 @@ def fetch_fasta(processed_accession_file_name):
     end_total = time.time()
     print(f"Total fetch time: {(end_total - start_total)/60:.2f} minutes")
 
+    write_records_xlsx(output_gb_file, Accessions)
 
 
 
