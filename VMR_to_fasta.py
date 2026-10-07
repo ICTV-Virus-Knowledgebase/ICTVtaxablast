@@ -387,25 +387,17 @@ def fetch_entrez_text(db, accession_ID, rettype, output_file_name, entrez_sleep,
 
 
 def write_records_xlsx(genbank_file_name, accessions, accession_tsv_file_name):
-    # TODO:
-    # Process all fields from the VMR.
-    # Format isolate_id as a link to PROD: =HYPERLINK(“URL”,”display text”).
-    # Format accession_id as link: https://www.ncbi.nlm.nih.gov/nuccore/AF271059.
 
-    isolate_ids_by_accession = {}
-    # accession number and its associated Isolate_ID.
-    accession_rows = accessions.loc[accessions["Accession"].notna(), ["Accession", "Isolate_ID"]]
-    # Loop through the accession and Isolate_ID rows in the accessions DataFrame.
-    for accession_id, isolate_id in zip(accession_rows["Accession"], accession_rows["Isolate_ID"]):
-        # Skip this row if pandas recognizes Isolate_ID as missing.
-        if pd.isna(isolate_id):
-            continue
-        # isolate_ids associated with the current accession.
-        isolate_ids = isolate_ids_by_accession.setdefault(str(accession_id), [])
-        isolate_id = str(isolate_id)
-        # If isolate_id is not in isolate_ids, add it
-        if isolate_id not in isolate_ids:
-            isolate_ids.append(isolate_id)
+    accession_rows_by_accession = {}
+    # accession number and its associated VMR fields.
+    accession_rows = accessions.loc[accessions["Accession"].notna()].fillna("")
+    # Loop through the rows in the accessions DataFrame.
+    for accession_row in accession_rows.to_dict("records"):
+        # VMR rows associated with the current accession, including rows with a missing Isolate_ID.
+        accession_id = str(accession_row["Accession"])
+        mapped_rows = accession_rows_by_accession.setdefault(accession_id, [])
+        # Keep each row, since the same isolate and accession can have different ranges.
+        mapped_rows.append(accession_row)
 
     records_xlsx_rows = []
     # Loop through the records in genbank_file_name (ex: records.gb).
@@ -418,54 +410,83 @@ def write_records_xlsx(genbank_file_name, accessions, accession_tsv_file_name):
             feature for feature in record.features if feature.type == "source"
         ]
 
-        # Get /organism for record, even when there is more than one source in the record.
-        organism_values = list(
-            dict.fromkeys(
-                value
-                for feature in source_features
-                for value in feature.qualifiers.get("organism", [])
-                if value
-            )
-        )
-
-        # Get /isolation_values for record, even when there is more than one source in the record.
-        isolation_values = list(
-            dict.fromkeys(
-                value
-                for feature in source_features
-                for value in feature.qualifiers.get("isolation_source", [])
-                if value
-            )
-        )
-
-        # Fallback when organism_values is empty.
-        if not organism_values:
-            organism_values = [record.annotations.get("organism", "")]
-        # I think this assumes that strain will always be on the first source feature in the record (I am not sure that it always is).
-        source_qualifiers = source_features[0].qualifiers if source_features else {}
-        strain_values = source_qualifiers.get("strain", [])
-
         # Pair field names with their values.
-        # Appends one row per mapped isolate ID, or one row with a blank isolate ID if none is mapped.
-        for isolate_id in isolate_ids_by_accession.get(accession_id) or [""]:
+        # Appends one row per mapped VMR row, or one row with blank VMR fields if none is mapped.
+        mapped_rows = accession_rows_by_accession.get(accession_id) or accession_rows_by_accession.get(record.id) or [{}]
+        for accession_row in mapped_rows:
+            isolate_id = str(accession_row.get("Isolate_ID", ""))
+            row_accession_id = str(accession_row.get("Accession", accession_id))
+            accession_range = None
+            # Use the row's Start_Loc and End_Loc when a range is specified.
+            if accession_row.get("Start_Loc", "") != "" or accession_row.get("End_Loc", "") != "":
+                accession_range = parse_accession_range(accession_row, row_accession_id, len(record.seq))
+            # Source locations must overlap the range. Without a range, use every source.
+            # Check each part of a compound location so gaps between parts do not count as overlaps.
+            matching_source_features = [
+                feature for feature in source_features
+                if accession_range is None or (
+                    feature.location is not None and any(
+                        int(part.start) < accession_range["end0"] and int(part.end) > accession_range["start0"]
+                        for part in feature.location.parts
+                    )
+                )
+            ]
+
+            # Get /organism for the range, even when there is more than one matching source in the record.
+            organism_values = list(
+                dict.fromkeys(
+                    value
+                    for feature in matching_source_features
+                    for value in feature.qualifiers.get("organism", [])
+                    if value
+                )
+            )
+
+            # Get /isolation_source for the range, even when there is more than one matching source in the record.
+            isolation_values = list(
+                dict.fromkeys(
+                    value
+                    for feature in matching_source_features
+                    for value in feature.qualifiers.get("isolation_source", [])
+                    if value
+                )
+            )
+
+            # Fallback when organism_values is empty and no range was specified.
+            if not organism_values and accession_range is None:
+                organism_values = [record.annotations.get("organism", "")]
+            # Get /strain from every matching source in the record.
+            strain_values = list(
+                dict.fromkeys(
+                    value
+                    for feature in matching_source_features
+                    for value in feature.qualifiers.get("strain", [])
+                    if value
+                )
+            )
+
+            # Escape quotes in link values for Excel formulas.
+            isolate_link_id = isolate_id.replace('"', '""')
+            accession_link_id = row_accession_id.replace('"', '""')
             records_xlsx_rows.append(
                 {
-                    "isolate_id": isolate_id,
-                    "accession_id": accession_id,
+                    **{key: value for key, value in accession_row.items() if key not in ["Isolate_ID", "Accession"]},
+                    "isolate_id": '=HYPERLINK("https://ictv.global/id/{0}","{0}")'.format(isolate_link_id) if isolate_id else "",
+                    "accession_id": '=HYPERLINK("https://www.ncbi.nlm.nih.gov/nuccore/{0}","{0}")'.format(accession_link_id),
                     "organism": ", ".join(organism_values),
-                    "strain": strain_values[0] if strain_values else "",
+                    "strain": ", ".join(strain_values),
                     "isolation_source": ", ".join(isolation_values),
                 }
             )
 
-    # Designate the columns wanted in xlsx.
+    # Designate the columns wanted in xlsx, including every remaining VMR field.
     records_xlsx_columns = [
         "isolate_id",
         "accession_id",
         "organism",
         "strain",
         "isolation_source",
-    ]
+    ] + [column for column in accessions.columns if column not in ["Isolate_ID", "Accession"]]
 
     records_xlsx_file_name = pathlib.Path(accession_tsv_file_name).with_suffix(".gbk_anno.xlsx")
     pd.DataFrame.from_records(records_xlsx_rows, columns=records_xlsx_columns).to_excel(records_xlsx_file_name, index=False)
