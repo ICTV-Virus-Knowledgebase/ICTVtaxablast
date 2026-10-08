@@ -473,9 +473,9 @@ def write_records_xlsx(genbank_file_name, accessions, accession_tsv_file_name):
                     **{key: value for key, value in accession_row.items() if key not in ["Isolate_ID", "Accession"]},
                     "isolate_id": '=HYPERLINK("https://ictv.global/id/{0}","{0}")'.format(isolate_link_id) if isolate_id else "",
                     "accession_id": '=HYPERLINK("https://www.ncbi.nlm.nih.gov/nuccore/{0}","{0}")'.format(accession_link_id),
-                    "organism": ", ".join(organism_values),
-                    "strain": ", ".join(strain_values),
-                    "isolation_source": ", ".join(isolation_values),
+                    "organism_gb": ", ".join(organism_values),
+                    "strain_gb": ", ".join(strain_values),
+                    "isolation_source_gb": ", ".join(isolation_values),
                 }
             )
 
@@ -483,10 +483,13 @@ def write_records_xlsx(genbank_file_name, accessions, accession_tsv_file_name):
     records_xlsx_columns = [
         "isolate_id",
         "accession_id",
-        "organism",
-        "strain",
-        "isolation_source",
-    ] + [column for column in accessions.columns if column not in ["Isolate_ID", "Accession"]]
+    ] + [
+        column for column in accessions.columns if column not in ["Isolate_ID", "Accession"]
+    ] + [
+        "organism_gb",
+        "strain_gb",
+        "isolation_source_gb",
+    ]
 
     records_xlsx_file_name = pathlib.Path(accession_tsv_file_name).with_suffix(".gbk_anno.xlsx")
     pd.DataFrame.from_records(records_xlsx_rows, columns=records_xlsx_columns).to_excel(records_xlsx_file_name, index=False)

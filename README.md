@@ -102,10 +102,26 @@ diff -w -u test_data/results/$DB/$TASK/tax_results.json test_out/$DB/$TASK/tax_r
 
   This also writes an annotation workbook beside the processed-accessions TSV, using its name
   with `.gbk_anno.xlsx` appended to the stem (for example, `processed_accessions_b.gbk_anno.xlsx`
-  when using `-ea b`). It has `isolate_id`, `accession_id`, `organism`, `strain`, and
-  `isolation_source` columns. For records with multiple source features, distinct organism and
-  isolation-source values are joined with commas. `isolate_id` is taken from the VMR and matched
-  by accession; unavailable qualifiers are left blank.
+  when using `-ea b`). The `write_records_xlsx` function reads the downloaded GenBank records
+  from `records.gb` and includes every field from the processed-accessions TSV. `Isolate_ID`
+  and `Accession` are exported as `isolate_id` and `accession_id`, using Excel `HYPERLINK`
+  formulas that display the IDs and link to `https://ictv.global/id/<isolate_id>` and
+  `https://www.ncbi.nlm.nih.gov/nuccore/<accession_id>`, respectively. The workbook also includes
+  `organism_gb`, `strain_gb`, and `isolation_source_gb` from the GenBank source features, at the end
+  of the workbook after the VMR columns.
+
+  Each GenBank record is matched to TSV rows by accession, with a separate export row for each
+  matching TSV row. This preserves different ranges for the same isolate and accession. Records
+  without a matching TSV row are exported with their accession and blank VMR fields.
+
+  When a TSV row specifies `Start_Loc` and `End_Loc`, only source features overlapping that
+  range are included. Coordinates are 1-based and inclusive, and even a partial overlap counts.
+  Each part of a compound source location is checked separately, so gaps between parts do not
+  count as overlaps. When both coordinates are blank, every source in the record is included.
+  Distinct organism, strain, and isolation-source values from all matching sources are joined
+  with commas in their respective `_gb` columns. Missing qualifiers are left blank. If no range was
+  specified and no source provides an organism, the record's organism annotation is used as a
+  fallback; a specified range with no matching sources leaves the annotation columns blank.
     
 <h3>Build database</h3>
 
