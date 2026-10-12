@@ -386,99 +386,86 @@ def fetch_entrez_text(db, accession_ID, rettype, output_file_name, entrez_sleep,
     return raw_text
 
 
-def write_records_xlsx(genbank_file_name, accessions, accession_tsv_file_name):
-
-    accession_rows_by_accession = {}
-    # accession number and its associated VMR fields.
-    accession_rows = accessions.loc[accessions["Accession"].notna()].fillna("")
-    # Loop through the rows in the accessions DataFrame.
-    for accession_row in accession_rows.to_dict("records"):
-        # VMR rows associated with the current accession, including rows with a missing Isolate_ID.
-        accession_id = str(accession_row["Accession"])
-        mapped_rows = accession_rows_by_accession.setdefault(accession_id, [])
-        # Keep each row, since the same isolate and accession can have different ranges.
-        mapped_rows.append(accession_row)
-
+def records_xlsx_rows_for_record(record, accession_id, mapped_rows):
     records_xlsx_rows = []
-    # Loop through the records in genbank_file_name (ex: records.gb).
-    for record in SeqIO.parse(genbank_file_name, "genbank"):
-        accession_ids = record.annotations.get("accessions") or [record.id]
-        accession_id = str(accession_ids[0])
-        # List comprehension containing every feature of type "source"
-        # This is needed to deal with records that have more than one source inside records.gb.
-        source_features = [
-            feature for feature in record.features if feature.type == "source"
+    # List comprehension containing every feature of type "source"
+    # This is needed to deal with records that have more than one source inside records.gb.
+    source_features = [
+        feature for feature in record.features if feature.type == "source"
+    ]
+
+    # Pair field names with their values.
+    # Appends one row per mapped VMR row, or one row with blank VMR fields if none is mapped.
+    for accession_row in mapped_rows:
+        isolate_id = str(accession_row.get("Isolate_ID", ""))
+        row_accession_id = str(accession_row.get("Accession", accession_id))
+        accession_range = None
+        # Use the row's Start_Loc and End_Loc when a range is specified.
+        if accession_row.get("Start_Loc", "") != "" or accession_row.get("End_Loc", "") != "":
+            accession_range = parse_accession_range(accession_row, row_accession_id, len(record.seq))
+        # Source locations must overlap the range. Without a range, use every source.
+        # Check each part of a compound location so gaps between parts do not count as overlaps.
+        matching_source_features = [
+            feature for feature in source_features
+            if accession_range is None or (
+                feature.location is not None and any(
+                    int(part.start) < accession_range["end0"] and int(part.end) > accession_range["start0"]
+                    for part in feature.location.parts
+                )
+            )
         ]
 
-        # Pair field names with their values.
-        # Appends one row per mapped VMR row, or one row with blank VMR fields if none is mapped.
-        mapped_rows = accession_rows_by_accession.get(accession_id) or accession_rows_by_accession.get(record.id) or [{}]
-        for accession_row in mapped_rows:
-            isolate_id = str(accession_row.get("Isolate_ID", ""))
-            row_accession_id = str(accession_row.get("Accession", accession_id))
-            accession_range = None
-            # Use the row's Start_Loc and End_Loc when a range is specified.
-            if accession_row.get("Start_Loc", "") != "" or accession_row.get("End_Loc", "") != "":
-                accession_range = parse_accession_range(accession_row, row_accession_id, len(record.seq))
-            # Source locations must overlap the range. Without a range, use every source.
-            # Check each part of a compound location so gaps between parts do not count as overlaps.
-            matching_source_features = [
-                feature for feature in source_features
-                if accession_range is None or (
-                    feature.location is not None and any(
-                        int(part.start) < accession_range["end0"] and int(part.end) > accession_range["start0"]
-                        for part in feature.location.parts
-                    )
-                )
-            ]
-
-            # Get /organism for the range, even when there is more than one matching source in the record.
-            organism_values = list(
-                dict.fromkeys(
-                    value
-                    for feature in matching_source_features
-                    for value in feature.qualifiers.get("organism", [])
-                    if value
-                )
+        # Get /organism for the range, even when there is more than one matching source in the record.
+        organism_values = list(
+            dict.fromkeys(
+                value
+                for feature in matching_source_features
+                for value in feature.qualifiers.get("organism", [])
+                if value
             )
+        )
 
-            # Get /isolation_source for the range, even when there is more than one matching source in the record.
-            isolation_values = list(
-                dict.fromkeys(
-                    value
-                    for feature in matching_source_features
-                    for value in feature.qualifiers.get("isolation_source", [])
-                    if value
-                )
+        # Get /isolation_source for the range, even when there is more than one matching source in the record.
+        isolation_values = list(
+            dict.fromkeys(
+                value
+                for feature in matching_source_features
+                for value in feature.qualifiers.get("isolation_source", [])
+                if value
             )
+        )
 
-            # Fallback when organism_values is empty and no range was specified.
-            if not organism_values and accession_range is None:
-                organism_values = [record.annotations.get("organism", "")]
-            # Get /strain from every matching source in the record.
-            strain_values = list(
-                dict.fromkeys(
-                    value
-                    for feature in matching_source_features
-                    for value in feature.qualifiers.get("strain", [])
-                    if value
-                )
+        # Fallback when organism_values is empty and no range was specified.
+        if not organism_values and accession_range is None:
+            organism_values = [record.annotations.get("organism", "")]
+        # Get /strain from every matching source in the record.
+        strain_values = list(
+            dict.fromkeys(
+                value
+                for feature in matching_source_features
+                for value in feature.qualifiers.get("strain", [])
+                if value
             )
+        )
 
-            # Escape quotes in link values for Excel formulas.
-            isolate_link_id = isolate_id.replace('"', '""')
-            accession_link_id = row_accession_id.replace('"', '""')
-            records_xlsx_rows.append(
-                {
-                    **{key: value for key, value in accession_row.items() if key not in ["Isolate_ID", "Accession"]},
-                    "isolate_id": '=HYPERLINK("https://ictv.global/id/{0}","{0}")'.format(isolate_link_id) if isolate_id else "",
-                    "accession_id": '=HYPERLINK("https://www.ncbi.nlm.nih.gov/nuccore/{0}","{0}")'.format(accession_link_id),
-                    "organism_gb": ", ".join(organism_values),
-                    "strain_gb": ", ".join(strain_values),
-                    "isolation_source_gb": ", ".join(isolation_values),
-                }
-            )
+        # Escape quotes in link values for Excel formulas.
+        isolate_link_id = isolate_id.replace('"', '""')
+        accession_link_id = row_accession_id.replace('"', '""')
+        records_xlsx_rows.append(
+            {
+                **{key: value for key, value in accession_row.items() if key not in ["Isolate_ID", "Accession"]},
+                "isolate_id": '=HYPERLINK("https://ictv.global/id/{0}","{0}")'.format(isolate_link_id) if isolate_id else "",
+                "accession_id": '=HYPERLINK("https://www.ncbi.nlm.nih.gov/nuccore/{0}","{0}")'.format(accession_link_id),
+                "organism_gb": ", ".join(organism_values),
+                "strain_gb": ", ".join(strain_values),
+                "isolation_source_gb": ", ".join(isolation_values),
+            }
+        )
 
+    return records_xlsx_rows
+
+
+def write_records_xlsx(records_xlsx_rows, accessions, accession_tsv_file_name):
     # Designate the columns wanted in xlsx, including every remaining VMR field.
     records_xlsx_columns = [
         "isolate_id",
@@ -677,219 +664,218 @@ def fetch_fasta(processed_accession_file_name):
     end_total = time.time()
     print(f"Total fetch time: {(end_total - start_total)/60:.2f} minutes")
 
-    write_records_xlsx(output_gb_file, Accessions, processed_accession_file_name)
+    accession_row_records = Accessions.fillna('').to_dict('records')
+    accession_row_indexes_by_accession = {}
+    genus_names_by_row = []
+    acc_to_genus = dict(zip(Accessions["Accession"], Accessions["Genus"]))
+    for count, (row, accession_value) in enumerate(zip(accession_row_records, Accessions["Accession"])):
+            accession_ID = row['Accession']
+            genus_name = acc_to_genus.get(accession_ID)
+            genus_names_by_row.append(genus_name)
+            if genus_name is None:
+                print(f"No genus found for {accession_ID}")
+            else:
+                os.makedirs(os.path.join(args.fasta_dir, genus_name), exist_ok=True)
 
+            if pd.notna(accession_value):
+                accession_row_indexes_by_accession.setdefault(str(accession_value), []).append(count)
 
-
-
-
-
-
-    accession_aa_fasta_paths = []
-    accession_nt_fasta_paths = []
-    accession_gb_paths= []
+    accession_aa_fasta_paths = [""] * len(accession_row_records)
+    accession_nt_fasta_paths = [""] * len(accession_row_records)
+    accession_gb_paths = [""] * len(accession_row_records)
     fna_regenerated_count = 0
     faa_regenerated_count = 0
 
-    for count, row in enumerate(Accessions.fillna('').to_dict('records')):
-            accession_ID  = row['Accession']
-            Isolate_ID   = row['Isolate_ID']
-            Isolate_type = row['Exemplar_Additional']
-            segment      = row['Segment_Name']
-            family_name  = row['Family']
-            genus_name   = row['Genus']
-            species_name = row['Species']
-            virus_names  = row['Virus_Names']
-            # if args.verbose: print("Fetch [",count,"] ID:",Isolate_ID," Species:",species_name," Segment:",segment," Accession:",accession_ID)
-            genus_dir = args.fasta_dir+"/"+str(genus_name)
-            if genus_name == "":
-                genus_dir = args.fasta_dir+"/"+"no_genus"
-            # individual_gb_file = genus_dir+"/"+str(accession_ID)+".gb"
-            # accession_aa_fasta = genus_dir+"/"+str(accession_ID)+".faa"
-            # accession_nt_fasta = genus_dir+"/"+str(accession_ID)+".fna"
+    def process_accession_row(count, row, record, accession_in_gb, mapped_genus_name):
+        nonlocal fna_regenerated_count, faa_regenerated_count
 
-            bad_protein_len= genus_dir+"/"+str(accession_ID)+"_bad_protein_length.tsv"
+        accession_ID = row['Accession']
+        Isolate_ID = row['Isolate_ID']
+        Isolate_type = row['Exemplar_Additional']
+        segment = row['Segment_Name']
+        family_name = row['Family']
+        genus_name = row['Genus']
+        species_name = row['Species']
+        virus_names = row['Virus_Names']
+        # if args.verbose: print("Fetch [",count,"] ID:",Isolate_ID," Species:",species_name," Segment:",segment," Accession:",accession_ID)
+        genus_dir = args.fasta_dir + "/" + str(genus_name)
+        if genus_name == "":
+            genus_dir = args.fasta_dir + "/" + "no_genus"
+        # individual_gb_file = genus_dir+"/"+str(accession_ID)+".gb"
+        # accession_aa_fasta = genus_dir+"/"+str(accession_ID)+".faa"
+        # accession_nt_fasta = genus_dir+"/"+str(accession_ID)+".fna"
 
-            # # accession_gb_paths.append(individual_gb_file)
-            # accession_aa_fasta_paths.append(accession_aa_fasta)
-            # accession_nt_fasta_paths.append(accession_nt_fasta)
+        bad_protein_len = genus_dir + "/" + str(accession_ID) + "_bad_protein_length.tsv"
 
+        genus_dir = os.path.join(args.fasta_dir, mapped_genus_name)
+        individual_gb_file = os.path.join(genus_dir, f"{accession_in_gb}.gb")
+        accession_aa_fasta = os.path.join(genus_dir, f"{accession_in_gb}.faa")
+        accession_nt_fasta = os.path.join(genus_dir, f"{accession_in_gb}.fna")
+        accession_gb_paths[count] = individual_gb_file
+        accession_aa_fasta_paths[count] = accession_aa_fasta
+        accession_nt_fasta_paths[count] = accession_nt_fasta
 
+        gb_open = record
+        try:
+            SeqIO.write(record, individual_gb_file, "genbank")
+            print(f"File {individual_gb_file} exists and is ready for processing.")
 
-            #DICT for genus and accession lookup. This is used to create genus directories and place the correct accession in the correct directory.
-            acc_to_genus = dict(zip(Accessions["Accession"], Accessions["Genus"]))
-            # for accession_ID in batch:
+            if os.path.getsize(individual_gb_file) == 0:
+                handle_accession_error(
+                    row,
+                    "failed to parse sequence for accession {0} from {1}: {2}".format(
+                        accession_ID, individual_gb_file, e
+                    ),
+                )
+                return False
+            parsed_record = SeqIO.read(individual_gb_file, "genbank")
 
-            # Find genus for this accession
-            genus_name = acc_to_genus.get(accession_ID)
-            if genus_name is None:
-                print(f"No genus found for {accession_ID}")
+            # Extract sequence.
+            nt_sequence = sequence_from_genbank_record(parsed_record, accession_ID, genus_dir, entrez_sleep)
+            # Compute range.
+            accession_range = parse_accession_range(row, accession_ID, len(nt_sequence))
+        except Exception as e:
+            handle_accession_error(
+                row,
+                "failed to parse sequence for accession {0} from {1}: {2}".format(
+                    accession_ID, individual_gb_file, e
+                ),
+                e,
+            )
+            return False
+
+        if nt_sequence:
+            gb_mtime = os.path.getmtime(individual_gb_file)
+            needs_fna_write = (
+                not os.path.exists(accession_nt_fasta)
+                or os.path.getmtime(accession_nt_fasta) < gb_mtime
+            )
+            needs_faa_write = (
+                not os.path.exists(accession_aa_fasta)
+                or os.path.getmtime(accession_aa_fasta) < gb_mtime
+            )
+
+            output_nt_sequence = nt_sequence
+            if accession_range is not None:
+                output_nt_sequence = nt_sequence[accession_range["start0"]:accession_range["end0"]]
+                if args.verbose:
+                    print("[FORMAT] Trimming {0} to {1}..{2}".format(
+                        accession_ID,
+                        accession_range["start"],
+                        accession_range["end"],
+                    ))
+
+            version = gb_open.annotations.get("sequence_version", "1")
+            Beginning_firstline = [species_name, "-", segment, "-", accession_ID, version]
+            End_firstline = [family_name, Isolate_type, virus_names]
+            Beginning_firstline = str(Beginning_firstline).replace("[", "").replace("]", "").replace("'", "").replace(",", " ")
+            Beginning_firstline = re.sub(
+                r"\s*-\s*", "-", re.sub(r"\s+", " ", Beginning_firstline)
+            ).replace(" ", "_", 1).replace(" ", ".")
+            # End first line only needed commas and brackets replaced with spaces.
+            End_firstlineline = str(End_firstline).replace("[", "").replace("]", "").replace("'", "").replace(",", " ")
+            first_line = Beginning_firstline + " " + End_firstlineline
+
+            if needs_fna_write:
+                with open(accession_nt_fasta, 'w') as make_nt_file:
+                    make_nt_file.write(">" + first_line + "\n")
+                    make_nt_file.write("{0}\n".format(output_nt_sequence))
+                fna_regenerated_count += 1
+                if args.verbose:
+                    print('    wrote: ' + accession_nt_fasta)
+            elif args.verbose:
+                print('    skip up-to-date: ' + accession_nt_fasta)
+
+            cds_features = [
+                feature for feature in gb_open.features
+                if feature.type == "CDS" and "translation" in feature.qualifiers
+            ]
+            protein_check = set()
+            faa_records = []
+            bad_protein_rows = []
+            for feature in cds_features:
+                if not feature_contained_in_range(feature, accession_range):
+                    continue
+
+                qual = feature.qualifiers
+                protein_id = qual.get("protein_id", ["unknown_protein"])[0]
+                product_name = qual.get("product", ["unknown_product"])[0]
+                protein_seq = qual["translation"][0].strip()
+                note_in_gb = qual.get("note", [""])[0]
+                codon_start = qual.get("codon_start", [""])[0]
+
+                protein_check.add(protein_seq)
+
+                processed_protein_rows.append([
+                    accession_ID, protein_id, product_name, note_in_gb, codon_start
+                ])
+
+                header = (
+                    f">{Beginning_firstline}-{protein_id} "
+                    f"{End_firstline} product={product_name}"
+                )
+                faa_records.append((header, protein_seq))
+                seq_in_nt = len(feature.location)
+                seq_test = seq_in_nt / 3
+                len_match = "YES" if seq_test == len(protein_seq) else "NO"
+
+                bad_protein_rows.append([
+                    accession_ID, seq_in_nt, len(protein_seq), len_match, protein_id
+                ])
+
+            if needs_faa_write and bad_protein_rows:
+                with open(bad_protein_len, 'w', newline="") as make_bad_protein_len:
+                    writer = csv.writer(make_bad_protein_len, delimiter='\t')
+                    writer.writerow([
+                        "Accession_ID", "Nucleotide_length",
+                        "Protein_length", "Match", "Protein_id"
+                    ])
+                    writer.writerows(bad_protein_rows)
+
+            if needs_faa_write:
+                with open(accession_aa_fasta, "w") as make_aa_file:
+                    for header, sequence in faa_records:
+                        make_aa_file.write(f"{header}\n{sequence}\n")
+                faa_regenerated_count += 1
+                if args.verbose:
+                    print(f"    wrote: {accession_aa_fasta} with {len(protein_check)} CDS records")
+            elif args.verbose:
+                print(f"    skip up-to-date: {accession_aa_fasta}")
+
+        return True
+
+    records_xlsx_rows = []
+    processed_row_indexes = set()
+    for record in SeqIO.parse(output_gb_file, "genbank"):
+        record_accessions = record.annotations.get("accessions") or [record.id]
+        record_accession_id = str(record_accessions[0])
+        xlsx_row_indexes = (
+            accession_row_indexes_by_accession.get(record_accession_id)
+            or accession_row_indexes_by_accession.get(record.id)
+            or []
+        )
+        mapped_rows = [accession_row_records[index] for index in xlsx_row_indexes] or [{}]
+        records_xlsx_rows.extend(
+            records_xlsx_rows_for_record(record, record_accession_id, mapped_rows)
+        )
+
+        genbank_accessions = record.annotations.get("accessions")
+        if not genbank_accessions:
+            continue
+        accession_in_gb = genbank_accessions[0]
+        for count in accession_row_indexes_by_accession.get(str(accession_in_gb), []):
+            if count in processed_row_indexes or genus_names_by_row[count] is None:
                 continue
+            if process_accession_row(
+                count,
+                accession_row_records[count],
+                record,
+                accession_in_gb,
+                genus_names_by_row[count],
+            ):
+                processed_row_indexes.add(count)
 
-# Create genus directory
-            genus_dir = os.path.join(args.fasta_dir, genus_name)
-            os.makedirs(genus_dir, exist_ok=True)
-
-# Search for the matching record in the batch GB file
-            for record in SeqIO.parse(output_gb_file, "genbank"):
-                accession_in_gb = record.annotations["accessions"][0]
-
-    # Only write the matching record
-
-                if accession_in_gb != accession_ID:
-                    continue
-                gb_open= record
-                individual_gb_file = os.path.join(genus_dir, f"{accession_in_gb}.gb")
-                accession_gb_paths.append(individual_gb_file)
-                    
-                accession_aa_fasta = os.path.join(genus_dir, f"{accession_in_gb}.faa")
-                accession_nt_fasta = os.path.join(genus_dir, f"{accession_in_gb}.fna")
-                accession_aa_fasta_paths.append(accession_aa_fasta)
-                accession_nt_fasta_paths.append(accession_nt_fasta)
-
-                
-                        # open genbank file and read using SeqIO
-                try:
-                    SeqIO.write(record, individual_gb_file, "genbank")
-                    print(f"File {individual_gb_file} exists and is ready for processing.")
-
-                    if os.path.getsize(individual_gb_file)==0:
-                        handle_accession_error(
-                            row,
-                            "failed to parse sequence for accession {0} from {1}: {2}".format(accession_ID, individual_gb_file, e),
-                                
-                                )
-                        continue
-                    parsed_record= SeqIO.read(individual_gb_file,"genbank")
-                    
-
-                    #extract sequence
-                    nt_sequence = sequence_from_genbank_record(parsed_record, accession_ID, genus_dir, entrez_sleep)
-                    #Compute range
-                    accession_range = parse_accession_range(
-                                    row, accession_ID, len(nt_sequence)
-                                )
-                except Exception as e:
-                    handle_accession_error(
-                            row,
-                            "failed to parse sequence for accession {0} from {1}: {2}".format(
-                                accession_ID, individual_gb_file, e
-                            ),
-                            e
-                        )
-                    continue
-
-
-                if nt_sequence:
-                    gb_mtime = os.path.getmtime(individual_gb_file)
-                    needs_fna_write = (
-                                                not os.path.exists(accession_nt_fasta) or
-                                                os.path.getmtime(accession_nt_fasta) < gb_mtime
-                                            )
-                    needs_faa_write = (
-                                                not os.path.exists(accession_aa_fasta) or
-                                                os.path.getmtime(accession_aa_fasta) < gb_mtime
-                                            )
-
-                    output_nt_sequence = nt_sequence
-                    if accession_range is not None:
-                        output_nt_sequence = nt_sequence[accession_range["start0"]:accession_range["end0"]]
-                        if args.verbose:
-                                        print("[FORMAT] Trimming {0} to {1}..{2}".format(
-                                                accession_ID,
-                                                accession_range["start"],
-                                                accession_range["end"]
-                                                    ))
-
-
-
-
-
-
-
-                    version = gb_open.annotations.get("sequence_version", "1")
-                    Beginning_firstline= ([species_name,"-",segment,"-",accession_ID,version,])
-                    End_firstline= ([family_name,Isolate_type,virus_names])
-                    Beginning_firstline= str(Beginning_firstline).replace("[","").replace("]","").replace("'","").replace(","," ")
-                    Beginning_firstline= re.sub(r"\s*-\s*", "-", re.sub(r"\s+"," ", Beginning_firstline)).replace(" ", "_", 1).replace(" ", ".")
-                        #end first line only needed commas and brackets replaced with spaces.
-                    End_firstlineline= str(End_firstline).replace("[","").replace("]","").replace("'","").replace(","," ")
-                    first_line= Beginning_firstline+" "+End_firstlineline
-                                
-
-                    if needs_fna_write:
-                                    with open(accession_nt_fasta,'w') as make_nt_file:
-                                    #first line of .fna file
-                                        make_nt_file.write(">"+first_line+"\n")
-                                    # sequence line of .fna file in fasta format
-                                        make_nt_file.write("{0}\n".format(output_nt_sequence))
-                                    fna_regenerated_count += 1
-                                    if args.verbose: print('    wrote: '+accession_nt_fasta)
-                    elif args.verbose:
-                                                print('    skip up-to-date: '+accession_nt_fasta)
-                    cds_features = [
-                                    f for f in gb_open.features
-                                    if f.type == "CDS" and "translation" in f.qualifiers
-                                ]
-                    protein_check = set()
-                    faa_records = []
-                    bad_protein_rows= []
-                    for feature in cds_features:
-                                    if not feature_contained_in_range(feature, accession_range):
-                                        continue
-
-                                    qual = feature.qualifiers
-                                    protein_id = qual.get("protein_id", ["unknown_protein"])[0]
-                                    product_name = qual.get("product", ["unknown_product"])[0]
-                                    protein_seq = qual["translation"][0].strip()
-                                    note_in_gb = qual.get("note", [""])[0]
-                                    codon_start = qual.get("codon_start", [""])[0]
-
-                                    protein_check.add(protein_seq)
-
-                                    # Save protein metadata
-                                    processed_protein_rows.append([
-                                                        accession_ID, protein_id, product_name, note_in_gb, codon_start
-                                                    ])
-
-                                                    # Build header once
-                                    header = (
-                                                f">{Beginning_firstline}-{protein_id} "
-                                                    f"{End_firstline} product={product_name}"
-                                                    )
-
-                                    faa_records.append((header, protein_seq))
-                                                    #length check (store rows, write once later)
-                                    seq_in_nt = len(feature.location)
-                                    seq_test = seq_in_nt / 3
-                                    len_match = "YES" if seq_test == len(protein_seq) else "NO"
-
-                                    bad_protein_rows.append([
-                                                        accession_ID, seq_in_nt, len(protein_seq), len_match, protein_id
-                                                    ])
-                                # Write bad protein length report once
-                    if needs_faa_write and bad_protein_rows:
-                                    with open(bad_protein_len, 'w', newline="") as make_bad_protein_len:
-                                        writer = csv.writer(make_bad_protein_len, delimiter='\t')
-                                        writer.writerow([
-                                        "Accession_ID", "Nucleotide_length",
-                                        "Protein_length", "Match", "Protein_id"
-                                ])
-                                        writer.writerows(bad_protein_rows)
-
-                # Write .faa only if needed
-                    if needs_faa_write:
-                                    with open(accession_aa_fasta, "w") as make_aa_file:
-                                        for header, sequence in faa_records:
-                                            make_aa_file.write(f"{header}\n{sequence}\n")
-                                    faa_regenerated_count += 1
-                                    if args.verbose:
-                                        print(f"    wrote: {accession_aa_fasta} with {len(protein_check)} CDS records")
-                    elif args.verbose:
-                                    print(f"    skip up-to-date: {accession_aa_fasta}")
-
-                                # IMPORTANT: stop processing duplicate records
-                    break
+    write_records_xlsx(records_xlsx_rows, Accessions, processed_accession_file_name)
 
 
 
