@@ -6,6 +6,20 @@ TESTS="nuc/blastn prot/blastp"
 if [[ ! -z "$1" && "$1" != -* ]]; then TESTS="$1"; shift; fi
 
 #
+# target docker container naem
+#
+NAME_FILE=docker_container_name.txt
+if [ ! -e "$NAME_FILE" ]; then 
+	echo "ERROR: $NAME_FILE not found"
+	exit 1
+fi
+echo READING $NAME_FILE
+DOCKER_CONTAINER_NAME=$(egrep -v "^#" $NAME_FILE| sed 's/[ \t\r\n]*//g')
+echo DOCKER_CONTAINER_NAME=$DOCKER_CONTAINER_NAME
+echo ""
+
+
+#
 # run list of tests
 # 
 for SPEC in $TESTS; do 
@@ -29,14 +43,14 @@ for SPEC in $TESTS; do
     echo sudo docker run -it \
 	 -v "${TEST_DIR}:/seq_in" \
 	 -v "${OUT_DIR}:/tax_out" \
-	 ictv_taxablast \
+	 ${DOCKER_CONTAINER_NAME} \
 	 ./taxablast -task $TASK \
 	 $*
 
     sudo docker run -it \
 	 -v "${TEST_DIR}:/seq_in" \
 	 -v "${OUT_DIR}:/tax_out" \
-	 ictv_taxablast \
+	 ${DOCKER_CONTAINER_NAME} \
 	 ./taxablast -task $TASK \
 	 $*
 
