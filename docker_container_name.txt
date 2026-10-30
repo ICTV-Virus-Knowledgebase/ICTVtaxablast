@@ -1,0 +1,8 @@
+#
+# name of container/image to create
+# and push to docker hub
+#
+# externalized to a file, so our various projects 
+# can share docker-related scripting file more easily
+#
+ictv_taxablast

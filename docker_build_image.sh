@@ -13,15 +13,32 @@
 #    docker pull ubuntu:22.04
 #
 
+#
+# target docker container naem
+#
+NAME_FILE=docker_container_name.txt
+if [ ! -e "$NAME_FILE" ]; then 
+	echo "ERROR: $NAME_FILE not found"
+	exit 1
+fi
+echo READING $NAME_FILE
+DOCKER_CONTAINER_NAME=$(egrep -v "^#" $NAME_FILE| sed 's/[ \t\r\n]*//g')
+echo DOCKER_CONTAINER_NAME=$DOCKER_CONTAINER_NAME
+echo ""
 
-# add git hash to version
+# get version+git_hash
+echo RUNNING ./version_git.sh
 ./version_git.sh
 VER_FILE=version_git.txt
 if [ ! -e "$VER_FILE" ]; then 
-	echo ERROR: $VER_FILE not found
+	echo "ERROR: $VER_FILE not found"
 	exit 1
 fi
-VER=$(cat $VER_FILE)
+echo READING $VER_FILE
+VER_STR=$(egrep -v "^#" $VER_FILE)
+echo VER_STR=$VER_STR
+echo ""
+
 
 #
 # copy in data files
@@ -33,6 +50,6 @@ VER=$(cat $VER_FILE)
 # Build image from Dockerfile
 #
 
-sudo docker build -t ictv_taxablast .
+sudo docker build -t $DOCKER_CONTAINER_NAME .
 
 
